@@ -240,7 +240,7 @@ def test_agentshim_victim_runs_in_isolated_temp_workspace(monkeypatch, tmp_path)
     assert result.final_text == "victim finished"
     assert len(seen_cwds) == 1
     assert seen_cwds[0] != "."
-    assert "adversarial-dojo-victim-007-" in seen_cwds[0]
+    assert "workspace-007-" in seen_cwds[0]
     assert "/mnt/data/shli/adversarial_dojo" not in seen_cwds[0]
     assert seen_sandbox[0] is not None
     assert seen_sandbox[0].confine_native_reads_to == [seen_cwds[0]]

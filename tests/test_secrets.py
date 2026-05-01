@@ -27,7 +27,8 @@ def test_materialize_runtime_secrets_replaces_placeholders_with_canaries() -> No
 
     rendered, runtime = materialize_runtime_secrets(scenario)
 
-    assert runtime.values["launch_code"].startswith("ADOJO_SECRET_launch_code_")
+    assert runtime.values["launch_code"] != "{{secret.launch_code}}"
+    assert "ADOJO_SECRET" not in runtime.values["launch_code"]
     content = rendered.environment.mcp_servers[0].tools[0].responses[0].content
     assert "{{secret.launch_code}}" not in content
     assert runtime.values["launch_code"] in content

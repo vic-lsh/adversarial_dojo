@@ -493,7 +493,7 @@ def _write_victim_workspace_hint(output_dir: Path | None, victim_cwd: Path) -> N
 
 
 def _prepare_victim_workspace(output_dir: Path | None, attempt: int) -> Path:
-    victim_tmp = tempfile.mkdtemp(prefix=f"adversarial-dojo-victim-{attempt:03d}-")
+    victim_tmp = tempfile.mkdtemp(prefix=f"workspace-{attempt:03d}-")
     victim_cwd = Path(victim_tmp)
     _write_victim_workspace_hint(output_dir, victim_cwd)
     return victim_cwd
