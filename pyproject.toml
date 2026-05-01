@@ -1,7 +1,28 @@
 [project]
 name = "adversarial-dojo"
 version = "0.1.0"
-description = "Add your description here"
+description = "Benchmark agents against evolved indirect prompt injection attacks."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "agentshim>=0.5.0",
+    "jsonschema>=4.23.0",
+    "mcp[cli]>=1.27.0",
+    "pydantic>=2.12.5",
+    "pyyaml>=6.0.3",
+]
+
+[project.scripts]
+adversarial-dojo = "adversarial_dojo.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

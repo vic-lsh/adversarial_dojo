@@ -1,0 +1,112 @@
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+from pydantic import ValidationError
+
+from adversarial_dojo.experiment import apply_config_overrides, run_attack_search, validate_supported_config
+from adversarial_dojo.models import AttackScenario, ExperimentConfig
+from adversarial_dojo.runner import apply_overrides, run_benchmark, validate_supported_runtime
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="adversarial-dojo")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    validate_parser = subparsers.add_parser("validate", help="Validate a YAML attack scenario.")
+    validate_parser.add_argument("scenario")
+
+    validate_config_parser = subparsers.add_parser("validate-config", help="Validate a TOML experiment config.")
+    validate_config_parser.add_argument("config")
+
+    run_parser = subparsers.add_parser("run", help="Run a YAML attack scenario.")
+    run_parser.add_argument("scenario")
+    run_parser.add_argument("--out", default=None)
+    run_parser.add_argument("--attacker-provider", default=None)
+    run_parser.add_argument("--attacker-model", default=None)
+    run_parser.add_argument("--victim-provider", default=None)
+    run_parser.add_argument("--victim-model", default=None)
+
+    attack_parser = subparsers.add_parser("attack", help="Run open-ended attacker-generated scenario search.")
+    attack_parser.add_argument("config")
+    attack_parser.add_argument("--out", default=None)
+    attack_parser.add_argument("--attacker-provider", default=None)
+    attack_parser.add_argument("--attacker-model", default=None)
+    attack_parser.add_argument("--victim-provider", default=None)
+    attack_parser.add_argument("--victim-model", default=None)
+
+    args = parser.parse_args(argv)
+
+    if args.command == "validate-config":
+        try:
+            config = ExperimentConfig.from_toml_file(args.config)
+            validate_supported_config(config)
+        except (OSError, ValidationError, ValueError) as exc:
+            print(f"invalid config: {exc}", file=sys.stderr)
+            return 2
+        print(f"valid config: {config.id}")
+        return 0
+
+    if args.command == "attack":
+        try:
+            config = ExperimentConfig.from_toml_file(args.config)
+        except (OSError, ValidationError, ValueError) as exc:
+            print(f"invalid config: {exc}", file=sys.stderr)
+            return 2
+        overrides = _agent_overrides(args)
+        try:
+            validate_supported_config(apply_config_overrides(config, overrides))
+        except ValueError as exc:
+            print(f"invalid config: {exc}", file=sys.stderr)
+            return 2
+        out = args.out or str(Path("runs") / config.id)
+        result = run_attack_search(config, overrides=overrides, output_dir=out)
+        print(json.dumps(result.model_dump(mode="json", exclude={"attempts"}), indent=2))
+        return 0
+
+    try:
+        scenario = AttackScenario.from_yaml_file(args.scenario)
+    except (OSError, ValidationError, ValueError) as exc:
+        print(f"invalid scenario: {exc}", file=sys.stderr)
+        return 2
+
+    if args.command == "validate":
+        try:
+            validate_supported_runtime(scenario)
+        except ValueError as exc:
+            print(f"invalid scenario: {exc}", file=sys.stderr)
+            return 2
+        print(f"valid scenario: {scenario.id}")
+        return 0
+
+    overrides = _agent_overrides(args)
+    try:
+        validate_supported_runtime(apply_overrides(scenario, overrides))
+    except ValueError as exc:
+        print(f"invalid scenario: {exc}", file=sys.stderr)
+        return 2
+
+    out = args.out or str(Path("runs") / scenario.id)
+    result = run_benchmark(
+        scenario,
+        overrides=overrides,
+        output_dir=out,
+    )
+    print(json.dumps(result.model_dump(mode="json", exclude={"attempts"}), indent=2))
+    return 0
+
+
+def _agent_overrides(args: argparse.Namespace) -> dict[str, str | None]:
+    return {
+        "attacker_provider": args.attacker_provider,
+        "attacker_model": args.attacker_model,
+        "victim_provider": args.victim_provider,
+        "victim_model": args.victim_model,
+    }
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
