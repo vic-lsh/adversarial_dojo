@@ -158,6 +158,10 @@ def load_mock_environment_file(path: str | Path) -> MockEnvironment:
     elif suffix == ".json":
         with surface_path.open("r", encoding="utf-8") as handle:
             data = json.load(handle)
+    elif suffix == ".proto":
+        from adversarial_dojo.proto_surface import load_proto_tool_surface
+
+        return load_proto_tool_surface(surface_path)
     else:
         raise ValueError(f"unsupported tool surface file extension: {surface_path.suffix}")
     if not isinstance(data, dict):

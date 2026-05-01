@@ -1,0 +1,1014 @@
+syntax = "proto3";
+
+package adversarial_dojo.google_workspace_mcp;
+
+import "google/protobuf/struct.proto";
+
+service Gmail {
+  rpc SearchGmailMessages(SearchGmailMessagesRequest) returns (ToolTextResponse);
+  rpc GetGmailMessageContent(GetGmailMessageContentRequest) returns (ToolTextResponse);
+  rpc GetGmailMessagesContentBatch(GetGmailMessagesContentBatchRequest) returns (ToolTextResponse);
+  rpc GetGmailAttachmentContent(GetGmailAttachmentContentRequest) returns (ToolTextResponse);
+  rpc SendGmailMessage(SendGmailMessageRequest) returns (ToolTextResponse);
+  rpc DraftGmailMessage(DraftGmailMessageRequest) returns (ToolTextResponse);
+  rpc GetGmailThreadContent(GetGmailThreadContentRequest) returns (ToolTextResponse);
+  rpc GetGmailThreadsContentBatch(GetGmailThreadsContentBatchRequest) returns (ToolTextResponse);
+  rpc ListGmailLabels(ListGmailLabelsRequest) returns (ToolTextResponse);
+  rpc ManageGmailLabel(ManageGmailLabelRequest) returns (ToolTextResponse);
+  rpc ListGmailFilters(ListGmailFiltersRequest) returns (ToolTextResponse);
+  rpc ManageGmailFilter(ManageGmailFilterRequest) returns (ToolTextResponse);
+  rpc ModifyGmailMessageLabels(ModifyGmailMessageLabelsRequest) returns (ToolTextResponse);
+  rpc BatchModifyGmailMessageLabels(BatchModifyGmailMessageLabelsRequest) returns (ToolTextResponse);
+}
+
+service Drive {
+  rpc SearchDriveFiles(SearchDriveFilesRequest) returns (ToolTextResponse);
+  rpc GetDriveFileContent(GetDriveFileContentRequest) returns (ToolTextResponse);
+  rpc GetDriveFileDownloadUrl(GetDriveFileDownloadUrlRequest) returns (ToolTextResponse);
+  rpc ListDriveItems(ListDriveItemsRequest) returns (ToolTextResponse);
+  rpc CreateDriveFolder(CreateDriveFolderRequest) returns (ToolTextResponse);
+  rpc CreateDriveFile(CreateDriveFileRequest) returns (ToolTextResponse);
+  rpc ImportToGoogleDoc(ImportToGoogleDocRequest) returns (ToolTextResponse);
+  rpc GetDriveFilePermissions(GetDriveFilePermissionsRequest) returns (ToolTextResponse);
+  rpc CheckDriveFilePublicAccess(CheckDriveFilePublicAccessRequest) returns (ToolTextResponse);
+  rpc UpdateDriveFile(UpdateDriveFileRequest) returns (ToolTextResponse);
+  rpc GetDriveShareableLink(GetDriveShareableLinkRequest) returns (ToolTextResponse);
+  rpc ManageDriveAccess(ManageDriveAccessRequest) returns (ToolTextResponse);
+  rpc CopyDriveFile(CopyDriveFileRequest) returns (ToolTextResponse);
+  rpc SetDriveFilePermissions(SetDriveFilePermissionsRequest) returns (ToolTextResponse);
+}
+
+service Calendar {
+  rpc ListCalendars(ListCalendarsRequest) returns (ToolTextResponse);
+  rpc GetEvents(GetEventsRequest) returns (ToolTextResponse);
+  rpc ManageEvent(ManageEventRequest) returns (ToolTextResponse);
+  rpc ManageOutOfOffice(ManageOutOfOfficeRequest) returns (ToolTextResponse);
+  rpc ManageFocusTime(ManageFocusTimeRequest) returns (ToolTextResponse);
+  rpc QueryFreebusy(QueryFreebusyRequest) returns (ToolTextResponse);
+  rpc CreateCalendar(CreateCalendarRequest) returns (ToolTextResponse);
+}
+
+service Docs {
+  rpc SearchDocs(SearchDocsRequest) returns (ToolTextResponse);
+  rpc GetDocContent(GetDocContentRequest) returns (ToolTextResponse);
+  rpc ListDocsInFolder(ListDocsInFolderRequest) returns (ToolTextResponse);
+  rpc CreateDoc(CreateDocRequest) returns (ToolTextResponse);
+  rpc ModifyDocText(ModifyDocTextRequest) returns (ToolTextResponse);
+  rpc FindAndReplaceDoc(FindAndReplaceDocRequest) returns (ToolTextResponse);
+  rpc InsertDocElements(InsertDocElementsRequest) returns (ToolTextResponse);
+  rpc InsertDocImage(InsertDocImageRequest) returns (ToolTextResponse);
+  rpc UpdateDocHeadersFooters(UpdateDocHeadersFootersRequest) returns (ToolTextResponse);
+  rpc BatchUpdateDoc(BatchUpdateDocRequest) returns (ToolTextResponse);
+  rpc InspectDocStructure(InspectDocStructureRequest) returns (ToolTextResponse);
+  rpc DebugDocsRuntimeInfo(DebugDocsRuntimeInfoRequest) returns (ToolTextResponse);
+  rpc CreateTableWithData(CreateTableWithDataRequest) returns (ToolTextResponse);
+  rpc DebugTableStructure(DebugTableStructureRequest) returns (ToolTextResponse);
+  rpc ExportDocToPdf(ExportDocToPdfRequest) returns (ToolTextResponse);
+  rpc UpdateParagraphStyle(UpdateParagraphStyleRequest) returns (ToolTextResponse);
+  rpc GetDocAsMarkdown(GetDocAsMarkdownRequest) returns (ToolTextResponse);
+  rpc ManageDocTab(ManageDocTabRequest) returns (ToolTextResponse);
+  rpc ListDocumentComments(ListDocumentCommentsRequest) returns (ToolTextResponse);
+  rpc ManageDocumentComment(ManageDocumentCommentRequest) returns (ToolTextResponse);
+}
+
+service Sheets {
+  rpc ListSpreadsheets(ListSpreadsheetsRequest) returns (ToolTextResponse);
+  rpc GetSpreadsheetInfo(GetSpreadsheetInfoRequest) returns (ToolTextResponse);
+  rpc ReadSheetValues(ReadSheetValuesRequest) returns (ToolTextResponse);
+  rpc ModifySheetValues(ModifySheetValuesRequest) returns (ToolTextResponse);
+  rpc FormatSheetRange(FormatSheetRangeRequest) returns (ToolTextResponse);
+  rpc ManageConditionalFormatting(ManageConditionalFormattingRequest) returns (ToolTextResponse);
+  rpc CreateSpreadsheet(CreateSpreadsheetRequest) returns (ToolTextResponse);
+  rpc CreateSheet(CreateSheetRequest) returns (ToolTextResponse);
+  rpc ListSheetTables(ListSheetTablesRequest) returns (ToolTextResponse);
+  rpc AppendTableRows(AppendTableRowsRequest) returns (ToolTextResponse);
+  rpc ResizeSheetDimensions(ResizeSheetDimensionsRequest) returns (ToolTextResponse);
+  rpc MoveSheetRows(MoveSheetRowsRequest) returns (ToolTextResponse);
+  rpc ListSpreadsheetComments(ListSpreadsheetCommentsRequest) returns (ToolTextResponse);
+  rpc ManageSpreadsheetComment(ManageSpreadsheetCommentRequest) returns (ToolTextResponse);
+}
+
+service Slides {
+  rpc CreatePresentation(CreatePresentationRequest) returns (ToolTextResponse);
+  rpc GetPresentation(GetPresentationRequest) returns (ToolTextResponse);
+  rpc BatchUpdatePresentation(BatchUpdatePresentationRequest) returns (ToolTextResponse);
+  rpc GetPage(GetPageRequest) returns (ToolTextResponse);
+  rpc GetPageThumbnail(GetPageThumbnailRequest) returns (ToolTextResponse);
+  rpc ListPresentationComments(ListPresentationCommentsRequest) returns (ToolTextResponse);
+  rpc ManagePresentationComment(ManagePresentationCommentRequest) returns (ToolTextResponse);
+}
+
+service Forms {
+  rpc CreateForm(CreateFormRequest) returns (ToolTextResponse);
+  rpc GetForm(GetFormRequest) returns (ToolTextResponse);
+  rpc SetPublishSettings(SetPublishSettingsRequest) returns (ToolTextResponse);
+  rpc GetFormResponse(GetFormResponseRequest) returns (ToolTextResponse);
+  rpc ListFormResponses(ListFormResponsesRequest) returns (ToolTextResponse);
+  rpc BatchUpdateForm(BatchUpdateFormRequest) returns (ToolTextResponse);
+}
+
+service Tasks {
+  rpc ListTaskLists(ListTaskListsRequest) returns (ToolTextResponse);
+  rpc GetTaskList(GetTaskListRequest) returns (ToolTextResponse);
+  rpc ManageTaskList(ManageTaskListRequest) returns (ToolTextResponse);
+  rpc ListTasks(ListTasksRequest) returns (ToolTextResponse);
+  rpc GetTask(GetTaskRequest) returns (ToolTextResponse);
+  rpc ManageTask(ManageTaskRequest) returns (ToolTextResponse);
+}
+
+service Contacts {
+  rpc ListContacts(ListContactsRequest) returns (ToolTextResponse);
+  rpc GetContact(GetContactRequest) returns (ToolTextResponse);
+  rpc SearchContacts(SearchContactsRequest) returns (ToolTextResponse);
+  rpc ManageContact(ManageContactRequest) returns (ToolTextResponse);
+  rpc ListContactGroups(ListContactGroupsRequest) returns (ToolTextResponse);
+  rpc GetContactGroup(GetContactGroupRequest) returns (ToolTextResponse);
+  rpc ManageContactsBatch(ManageContactsBatchRequest) returns (ToolTextResponse);
+  rpc ManageContactGroup(ManageContactGroupRequest) returns (ToolTextResponse);
+}
+
+service Chat {
+  rpc ListSpaces(ListSpacesRequest) returns (ToolTextResponse);
+  rpc GetMessages(GetMessagesRequest) returns (ToolTextResponse);
+  rpc SendMessage(SendMessageRequest) returns (ToolTextResponse);
+  rpc SearchMessages(SearchMessagesRequest) returns (ToolTextResponse);
+  rpc CreateReaction(CreateReactionRequest) returns (ToolTextResponse);
+  rpc DownloadChatAttachment(DownloadChatAttachmentRequest) returns (ToolTextResponse);
+}
+
+service Search {
+  rpc SearchCustom(SearchCustomRequest) returns (ToolTextResponse);
+  rpc GetSearchEngineInfo(GetSearchEngineInfoRequest) returns (ToolTextResponse);
+}
+
+service AppsScript {
+  rpc ListScriptProjects(ListScriptProjectsRequest) returns (ToolTextResponse);
+  rpc GetScriptProject(GetScriptProjectRequest) returns (ToolTextResponse);
+  rpc GetScriptContent(GetScriptContentRequest) returns (ToolTextResponse);
+  rpc CreateScriptProject(CreateScriptProjectRequest) returns (ToolTextResponse);
+  rpc UpdateScriptContent(UpdateScriptContentRequest) returns (ToolTextResponse);
+  rpc RunScriptFunction(RunScriptFunctionRequest) returns (ToolTextResponse);
+  rpc ListDeployments(ListDeploymentsRequest) returns (ToolTextResponse);
+  rpc ManageDeployment(ManageDeploymentRequest) returns (ToolTextResponse);
+  rpc ListScriptProcesses(ListScriptProcessesRequest) returns (ToolTextResponse);
+}
+message ToolTextResponse {
+  string result = 1;
+}
+
+message SearchGmailMessagesRequest {
+  string query = 1;
+  optional int32 page_size = 2;
+  optional string page_token = 3;
+}
+
+message GetGmailMessageContentRequest {
+  string message_id = 1;
+  optional string body_format = 2;
+}
+
+message GetGmailMessagesContentBatchRequest {
+  repeated string message_ids = 1;
+  optional string format = 2;
+  optional string body_format = 3;
+}
+
+message GetGmailAttachmentContentRequest {
+  string message_id = 1;
+  string attachment_id = 2;
+  optional bool return_base64 = 3;
+}
+
+message SendGmailMessageRequest {
+  string to = 1;
+  string subject = 2;
+  string body = 3;
+  optional string body_format = 4;
+  optional string cc = 5;
+  optional string bcc = 6;
+  optional string from_name = 7;
+  optional string from_email = 8;
+  optional string thread_id = 9;
+  optional string in_reply_to = 10;
+  optional string references = 11;
+  repeated google.protobuf.Struct attachments = 12;
+  optional bool include_signature = 13;
+}
+
+message DraftGmailMessageRequest {
+  string subject = 1;
+  string body = 2;
+  optional string body_format = 3;
+  optional string to = 4;
+  optional string cc = 5;
+  optional string bcc = 6;
+  optional string from_name = 7;
+  optional string from_email = 8;
+  optional string thread_id = 9;
+  optional string in_reply_to = 10;
+  optional string references = 11;
+  repeated google.protobuf.Struct attachments = 12;
+  optional bool include_signature = 13;
+  optional bool quote_original = 14;
+}
+
+message GetGmailThreadContentRequest {
+  string thread_id = 1;
+  optional string body_format = 2;
+  optional bool include_analysis = 3;
+}
+
+message GetGmailThreadsContentBatchRequest {
+  repeated string thread_ids = 1;
+  optional string body_format = 2;
+}
+
+message ListGmailLabelsRequest {
+}
+
+message ManageGmailLabelRequest {
+  string action = 1;
+  optional string name = 2;
+  optional string label_id = 3;
+  optional string label_list_visibility = 4;
+  optional string message_list_visibility = 5;
+}
+
+message ListGmailFiltersRequest {
+}
+
+message ManageGmailFilterRequest {
+  string action = 1;
+  optional google.protobuf.Struct criteria = 2;
+  optional google.protobuf.Struct filter_action = 3;
+  optional string filter_id = 4;
+}
+
+message ModifyGmailMessageLabelsRequest {
+  string message_id = 1;
+  repeated string add_label_ids = 2;
+  repeated string remove_label_ids = 3;
+}
+
+message BatchModifyGmailMessageLabelsRequest {
+  repeated string message_ids = 1;
+  repeated string add_label_ids = 2;
+  repeated string remove_label_ids = 3;
+}
+
+message SearchDriveFilesRequest {
+  string query = 1;
+  optional int32 page_size = 2;
+  optional string page_token = 3;
+  optional string drive_id = 4;
+  optional bool include_items_from_all_drives = 5;
+  optional string corpora = 6;
+  optional string file_type = 7;
+  optional bool detailed = 8;
+  optional string order_by = 9;
+}
+
+message GetDriveFileContentRequest {
+  string file_id = 1;
+}
+
+message GetDriveFileDownloadUrlRequest {
+  string file_id = 1;
+  optional string export_format = 2;
+}
+
+message ListDriveItemsRequest {
+  optional string folder_id = 1;
+  optional int32 page_size = 2;
+  optional string page_token = 3;
+  optional string drive_id = 4;
+  optional bool include_items_from_all_drives = 5;
+  optional string corpora = 6;
+  optional string file_type = 7;
+  optional bool detailed = 8;
+  optional string order_by = 9;
+}
+
+message CreateDriveFolderRequest {
+  string folder_name = 1;
+  optional string parent_folder_id = 2;
+}
+
+message CreateDriveFileRequest {
+  string file_name = 1;
+  optional string content = 2;
+  optional string folder_id = 3;
+  optional string mime_type = 4;
+  optional string fileUrl = 5;
+}
+
+message ImportToGoogleDocRequest {
+  string file_name = 1;
+  optional string content = 2;
+  optional string file_path = 3;
+  optional string file_url = 4;
+  optional string source_format = 5;
+  optional string folder_id = 6;
+}
+
+message GetDriveFilePermissionsRequest {
+  string file_id = 1;
+}
+
+message CheckDriveFilePublicAccessRequest {
+  string file_name = 1;
+}
+
+message UpdateDriveFileRequest {
+  string file_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  optional string mime_type = 4;
+  optional string add_parents = 5;
+  optional string remove_parents = 6;
+  optional bool starred = 7;
+  optional bool trashed = 8;
+  optional bool writers_can_share = 9;
+  optional bool copy_requires_writer_permission = 10;
+  optional google.protobuf.Struct properties = 11;
+}
+
+message GetDriveShareableLinkRequest {
+  string file_id = 1;
+}
+
+message ManageDriveAccessRequest {
+  string file_id = 1;
+  string action = 2;
+  optional string share_with = 3;
+  optional string role = 4;
+  optional string share_type = 5;
+  optional string permission_id = 6;
+  repeated google.protobuf.Struct recipients = 7;
+  optional bool send_notification = 8;
+  optional string email_message = 9;
+  optional string expiration_time = 10;
+  optional bool allow_file_discovery = 11;
+  optional string new_owner_email = 12;
+  optional bool move_to_new_owners_root = 13;
+}
+
+message CopyDriveFileRequest {
+  string file_id = 1;
+  optional string new_name = 2;
+  optional string parent_folder_id = 3;
+}
+
+message SetDriveFilePermissionsRequest {
+  string file_id = 1;
+  optional string link_sharing = 2;
+  optional bool writers_can_share = 3;
+  optional bool copy_requires_writer_permission = 4;
+}
+
+message ListCalendarsRequest {
+}
+
+message GetEventsRequest {
+  optional string calendar_id = 1;
+  optional string event_id = 2;
+  optional string time_min = 3;
+  optional string time_max = 4;
+  optional int32 max_results = 5;
+  optional string query = 6;
+  optional bool detailed = 7;
+  optional bool include_attachments = 8;
+}
+
+message ManageEventRequest {
+  string action = 1;
+  optional string summary = 2;
+  optional string start_time = 3;
+  optional string end_time = 4;
+  optional string event_id = 5;
+  optional string calendar_id = 6;
+  optional string description = 7;
+  optional string location = 8;
+  repeated string attendees = 9;
+  optional string timezone = 10;
+  repeated string attachments = 11;
+  optional bool add_google_meet = 12;
+  optional string reminders = 13;
+  optional bool use_default_reminders = 14;
+  optional string transparency = 15;
+  optional string visibility = 16;
+  optional string color_id = 17;
+  repeated string recurrence = 18;
+  optional bool guests_can_modify = 19;
+  optional bool guests_can_invite_others = 20;
+  optional bool guests_can_see_other_guests = 21;
+  optional string response = 22;
+  optional string rsvp_comment = 23;
+  optional string send_updates = 24;
+}
+
+message ManageOutOfOfficeRequest {
+  string action = 1;
+  optional string start_time = 2;
+  optional string end_time = 3;
+  optional string summary = 4;
+  optional string auto_decline_mode = 5;
+  optional string decline_message = 6;
+  repeated string recurrence = 7;
+  optional string timezone = 8;
+  optional string time_min = 9;
+  optional string time_max = 10;
+  optional int32 max_results = 11;
+  optional string event_id = 12;
+  optional string calendar_id = 13;
+}
+
+message ManageFocusTimeRequest {
+  string action = 1;
+  optional string start_time = 2;
+  optional string end_time = 3;
+  optional string summary = 4;
+  optional string description = 5;
+  optional string auto_decline_mode = 6;
+  optional string decline_message = 7;
+  optional string chat_status = 8;
+  repeated string recurrence = 9;
+  optional string timezone = 10;
+  optional string time_min = 11;
+  optional string time_max = 12;
+  optional int32 max_results = 13;
+  optional string event_id = 14;
+  optional string calendar_id = 15;
+}
+
+message QueryFreebusyRequest {
+  string time_min = 1;
+  string time_max = 2;
+  repeated string calendar_ids = 3;
+  optional int32 group_expansion_max = 4;
+  optional int32 calendar_expansion_max = 5;
+}
+
+message CreateCalendarRequest {
+  string summary = 1;
+  optional string description = 2;
+  optional string timezone = 3;
+}
+
+message SearchDocsRequest {
+  string query = 1;
+  optional int32 page_size = 2;
+}
+
+message GetDocContentRequest {
+  string document_id = 1;
+  optional string suggestions_view_mode = 2;
+}
+
+message ListDocsInFolderRequest {
+  optional string folder_id = 1;
+  optional int32 page_size = 2;
+}
+
+message CreateDocRequest {
+  string title = 1;
+  optional string content = 2;
+}
+
+message ModifyDocTextRequest {
+  string document_id = 1;
+  int32 start_index = 2;
+  optional int32 end_index = 3;
+  optional string text = 4;
+  optional string tab_id = 5;
+  optional string segment_id = 6;
+  optional bool end_of_segment = 7;
+  optional bool bold = 8;
+  optional bool italic = 9;
+  optional bool underline = 10;
+  optional bool strikethrough = 11;
+  optional int32 font_size = 12;
+  optional string font_family = 13;
+  optional int32 font_weight = 14;
+  optional string text_color = 15;
+  optional string background_color = 16;
+  optional string link_url = 17;
+  optional bool clear_link = 18;
+  optional string baseline_offset = 19;
+  optional bool small_caps = 20;
+}
+
+message FindAndReplaceDocRequest {
+  string document_id = 1;
+  string find_text = 2;
+  string replace_text = 3;
+  optional bool match_case = 4;
+  optional string tab_id = 5;
+}
+
+message InsertDocElementsRequest {
+  string document_id = 1;
+  string element_type = 2;
+  int32 index = 3;
+  optional int32 rows = 4;
+  optional int32 columns = 5;
+  optional string list_type = 6;
+  optional string text = 7;
+}
+
+message InsertDocImageRequest {
+  string document_id = 1;
+  string image_source = 2;
+  int32 index = 3;
+  optional int32 width = 4;
+  optional int32 height = 5;
+}
+
+message UpdateDocHeadersFootersRequest {
+  string document_id = 1;
+  string section_type = 2;
+  string content = 3;
+  optional string header_footer_type = 4;
+}
+
+message BatchUpdateDocRequest {
+  string document_id = 1;
+  repeated google.protobuf.Value operations = 2;
+}
+
+message InspectDocStructureRequest {
+  string document_id = 1;
+  optional bool detailed = 2;
+  optional string tab_id = 3;
+}
+
+message DebugDocsRuntimeInfoRequest {
+}
+
+message CreateTableWithDataRequest {
+  string document_id = 1;
+  repeated string table_data = 2;
+  int32 index = 3;
+  optional bool bold_headers = 4;
+  optional string tab_id = 5;
+}
+
+message DebugTableStructureRequest {
+  string document_id = 1;
+  optional int32 table_index = 2;
+}
+
+message ExportDocToPdfRequest {
+  string document_id = 1;
+  optional string pdf_filename = 2;
+  optional string folder_id = 3;
+}
+
+message UpdateParagraphStyleRequest {
+  string document_id = 1;
+  int32 start_index = 2;
+  int32 end_index = 3;
+  optional int32 heading_level = 4;
+  optional string alignment = 5;
+  optional double line_spacing = 6;
+  optional double indent_first_line = 7;
+  optional double indent_start = 8;
+  optional double indent_end = 9;
+  optional double space_above = 10;
+  optional double space_below = 11;
+  optional string named_style_type = 12;
+  optional string tab_id = 13;
+  optional string segment_id = 14;
+  optional string direction = 15;
+  optional bool keep_lines_together = 16;
+  optional bool keep_with_next = 17;
+  optional bool avoid_widow_and_orphan = 18;
+  optional bool page_break_before = 19;
+  optional string spacing_mode = 20;
+  optional string shading_color = 21;
+  optional string list_type = 22;
+  optional int32 list_nesting_level = 23;
+  optional string bullet_preset = 24;
+}
+
+message GetDocAsMarkdownRequest {
+  string document_id = 1;
+  optional bool include_comments = 2;
+  optional string comment_mode = 3;
+  optional bool include_resolved = 4;
+  optional string suggestions_view_mode = 5;
+}
+
+message ManageDocTabRequest {
+  string document_id = 1;
+  string action = 2;
+  optional string tab_id = 3;
+  optional string title = 4;
+  optional int32 index = 5;
+  optional string parent_tab_id = 6;
+  optional string markdown_text = 7;
+  optional bool replace_existing = 8;
+}
+
+message ListDocumentCommentsRequest {
+  string document_id = 1;
+}
+
+message ManageDocumentCommentRequest {
+  string document_id = 1;
+  string action = 2;
+  optional string comment_content = 3;
+  optional string comment_id = 4;
+}
+
+message ListSpreadsheetsRequest {
+  optional int32 max_results = 1;
+}
+
+message GetSpreadsheetInfoRequest {
+  string spreadsheet_id = 1;
+}
+
+message ReadSheetValuesRequest {
+  string spreadsheet_id = 1;
+  optional string range_name = 2;
+  optional bool include_hyperlinks = 3;
+  optional bool include_notes = 4;
+  optional bool include_formulas = 5;
+}
+
+message ModifySheetValuesRequest {
+  string spreadsheet_id = 1;
+  string range_name = 2;
+  optional string values = 3;
+  optional string value_input_option = 4;
+  optional bool clear_values = 5;
+}
+
+message FormatSheetRangeRequest {
+  string spreadsheet_id = 1;
+  string range_name = 2;
+  optional string background_color = 3;
+  optional string text_color = 4;
+  optional string number_format_type = 5;
+  optional string number_format_pattern = 6;
+  optional string wrap_strategy = 7;
+  optional string horizontal_alignment = 8;
+  optional string vertical_alignment = 9;
+  optional bool bold = 10;
+  optional bool italic = 11;
+  optional int32 font_size = 12;
+}
+
+message ManageConditionalFormattingRequest {
+  string spreadsheet_id = 1;
+  string action = 2;
+  optional string range_name = 3;
+  optional string condition_type = 4;
+  optional string condition_values = 5;
+  optional string background_color = 6;
+  optional string text_color = 7;
+  optional int32 rule_index = 8;
+  optional string gradient_points = 9;
+  optional string sheet_name = 10;
+}
+
+message CreateSpreadsheetRequest {
+  string title = 1;
+  repeated string sheet_names = 2;
+}
+
+message CreateSheetRequest {
+  string spreadsheet_id = 1;
+  string sheet_name = 2;
+}
+
+message ListSheetTablesRequest {
+  string spreadsheet_id = 1;
+}
+
+message AppendTableRowsRequest {
+  string spreadsheet_id = 1;
+  string table_id = 2;
+  string values = 3;
+}
+
+message ResizeSheetDimensionsRequest {
+  string spreadsheet_id = 1;
+  optional string sheet_name = 2;
+  optional string column_sizes = 3;
+  optional string row_sizes = 4;
+  optional string auto_resize_columns = 5;
+  optional string auto_resize_rows = 6;
+  optional int32 frozen_row_count = 7;
+  optional int32 frozen_column_count = 8;
+  optional string hide_columns = 9;
+  optional string unhide_columns = 10;
+  optional string hide_rows = 11;
+  optional string unhide_rows = 12;
+  optional int32 insert_rows = 13;
+  optional int32 insert_rows_at = 14;
+  optional int32 insert_columns = 15;
+  optional string insert_columns_at = 16;
+  optional string delete_rows = 17;
+  optional string delete_row_range = 18;
+  optional string delete_columns = 19;
+}
+
+message MoveSheetRowsRequest {
+  string spreadsheet_id = 1;
+  string source_sheet = 2;
+  int32 start_row = 3;
+  int32 end_row = 4;
+  string destination_sheet = 5;
+}
+
+message ListSpreadsheetCommentsRequest {
+  string spreadsheet_id = 1;
+}
+
+message ManageSpreadsheetCommentRequest {
+  string spreadsheet_id = 1;
+  string action = 2;
+  optional string comment_content = 3;
+  optional string comment_id = 4;
+}
+
+message ListSpacesRequest {
+  optional int32 page_size = 1;
+  optional string space_type = 2;
+}
+
+message GetMessagesRequest {
+  string space_id = 1;
+  optional int32 page_size = 2;
+  optional string order_by = 3;
+  optional string message_filter = 4;
+}
+
+message SendMessageRequest {
+  string space_id = 1;
+  string message_text = 2;
+  optional string thread_key = 3;
+  optional string thread_name = 4;
+}
+
+message SearchMessagesRequest {
+  optional string query = 1;
+  optional string space_id = 2;
+  optional int32 page_size = 3;
+  optional string time_filter = 4;
+  optional int32 max_spaces = 5;
+}
+
+message CreateReactionRequest {
+  string message_id = 1;
+  string emoji_unicode = 2;
+}
+
+message DownloadChatAttachmentRequest {
+  string message_id = 1;
+  optional int32 attachment_index = 2;
+}
+
+message CreateFormRequest {
+  string title = 1;
+  optional string description = 2;
+  optional string document_title = 3;
+}
+
+message GetFormRequest {
+  string form_id = 1;
+}
+
+message SetPublishSettingsRequest {
+  string form_id = 1;
+  optional bool publish_as_template = 2;
+  optional bool require_authentication = 3;
+}
+
+message GetFormResponseRequest {
+  string form_id = 1;
+  string response_id = 2;
+}
+
+message ListFormResponsesRequest {
+  string form_id = 1;
+  optional int32 page_size = 2;
+  optional string page_token = 3;
+}
+
+message BatchUpdateFormRequest {
+  string form_id = 1;
+  repeated google.protobuf.Struct requests = 2;
+}
+
+message CreatePresentationRequest {
+  optional string title = 1;
+}
+
+message GetPresentationRequest {
+  string presentation_id = 1;
+}
+
+message BatchUpdatePresentationRequest {
+  string presentation_id = 1;
+  repeated google.protobuf.Struct requests = 2;
+}
+
+message GetPageRequest {
+  string presentation_id = 1;
+  string page_object_id = 2;
+}
+
+message GetPageThumbnailRequest {
+  string presentation_id = 1;
+  string page_object_id = 2;
+  optional string thumbnail_size = 3;
+}
+
+message ListPresentationCommentsRequest {
+  string presentation_id = 1;
+}
+
+message ManagePresentationCommentRequest {
+  string presentation_id = 1;
+  string action = 2;
+  optional string comment_content = 3;
+  optional string comment_id = 4;
+}
+
+message ListTaskListsRequest {
+  optional int32 max_results = 1;
+  optional string page_token = 2;
+}
+
+message GetTaskListRequest {
+  string task_list_id = 1;
+}
+
+message ManageTaskListRequest {
+  string action = 1;
+  optional string task_list_id = 2;
+  optional string title = 3;
+}
+
+message ListTasksRequest {
+  string task_list_id = 1;
+  optional int32 max_results = 2;
+  optional string page_token = 3;
+  optional bool show_completed = 4;
+  optional bool show_deleted = 5;
+  optional bool show_hidden = 6;
+  optional bool show_assigned = 7;
+  optional string completed_max = 8;
+  optional string completed_min = 9;
+  optional string due_max = 10;
+  optional string due_min = 11;
+  optional string updated_min = 12;
+}
+
+message GetTaskRequest {
+  string task_list_id = 1;
+  string task_id = 2;
+}
+
+message ManageTaskRequest {
+  string action = 1;
+  string task_list_id = 2;
+  optional string task_id = 3;
+  optional string title = 4;
+  optional string notes = 5;
+  optional string status = 6;
+  optional string due = 7;
+  optional string parent = 8;
+  optional string previous = 9;
+  optional string destination_task_list = 10;
+}
+
+message SearchCustomRequest {
+  string q = 1;
+  optional int32 num = 2;
+  optional int32 start = 3;
+  optional string safe = 4;
+  optional string search_type = 5;
+  optional string site_search = 6;
+  optional string site_search_filter = 7;
+  optional string date_restrict = 8;
+  optional string file_type = 9;
+  optional string language = 10;
+  optional string country = 11;
+  repeated string sites = 12;
+}
+
+message GetSearchEngineInfoRequest {
+}
+
+message ListContactsRequest {
+  optional int32 page_size = 1;
+  optional string page_token = 2;
+  optional string sort_order = 3;
+}
+
+message GetContactRequest {
+  string contact_id = 1;
+}
+
+message SearchContactsRequest {
+  string query = 1;
+  optional int32 page_size = 2;
+}
+
+message ManageContactRequest {
+  string action = 1;
+  optional string contact_id = 2;
+  optional string given_name = 3;
+  optional string family_name = 4;
+  repeated google.protobuf.Struct phones = 5;
+  repeated google.protobuf.Struct emails = 6;
+  repeated google.protobuf.Struct organizations = 7;
+  optional string notes = 8;
+  optional string address = 9;
+  optional string phones_mode = 10;
+  optional string emails_mode = 11;
+  optional string organizations_mode = 12;
+  optional string phone = 13;
+  optional string email = 14;
+  optional string organization = 15;
+  optional string job_title = 16;
+}
+
+message ListContactGroupsRequest {
+  optional int32 page_size = 1;
+  optional string page_token = 2;
+}
+
+message GetContactGroupRequest {
+  string group_id = 1;
+  optional int32 max_members = 2;
+}
+
+message ManageContactsBatchRequest {
+  string action = 1;
+  repeated google.protobuf.Struct contacts = 2;
+  repeated google.protobuf.Struct updates = 3;
+  repeated string contact_ids = 4;
+  optional string field = 5;
+}
+
+message ManageContactGroupRequest {
+  string action = 1;
+  optional string group_id = 2;
+  optional string name = 3;
+  optional bool delete_contacts = 4;
+  repeated string add_contact_ids = 5;
+  repeated string remove_contact_ids = 6;
+}
+
+message ListScriptProjectsRequest {
+  optional int32 page_size = 1;
+  optional string page_token = 2;
+}
+
+message GetScriptProjectRequest {
+  string script_id = 1;
+}
+
+message GetScriptContentRequest {
+  string script_id = 1;
+  string file_name = 2;
+}
+
+message CreateScriptProjectRequest {
+  string title = 1;
+  optional string parent_id = 2;
+}
+
+message UpdateScriptContentRequest {
+  string script_id = 1;
+  repeated google.protobuf.Struct files = 2;
+}
+
+message RunScriptFunctionRequest {
+  string script_id = 1;
+  string function_name = 2;
+  repeated google.protobuf.Value parameters = 3;
+  optional bool dev_mode = 4;
+}
+
+message ListDeploymentsRequest {
+  string script_id = 1;
+}
+
+message ManageDeploymentRequest {
+  string action = 1;
+  string script_id = 2;
+  optional string deployment_id = 3;
+  optional string description = 4;
+  optional string version_description = 5;
+}
+
+message ListScriptProcessesRequest {
+  optional int32 page_size = 1;
+  optional string script_id = 2;
+}

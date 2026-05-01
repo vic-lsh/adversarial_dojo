@@ -17,7 +17,7 @@ The TOML config is the normal entry point. It only chooses the attacker/victim a
 
 ```toml
 id = "open-ended-injection-search"
-tool_surface_file = "tool_surfaces/workspace.toml"
+tool_surface_file = "tool_surfaces/workspace.proto"
 
 [agents.attacker]
 provider = "codex"
@@ -38,7 +38,35 @@ max_tools_per_server = 8
 max_tool_response_chars = 4000
 ```
 
-The optional `tool_surface_file` path is resolved relative to the config file. It should contain only the mocked MCP server/tool schema surface:
+The optional `tool_surface_file` path is resolved relative to the config file. It can point at `.proto`, `.toml`, `.yaml`, or `.json`.
+
+For proto surfaces, services become MCP servers, RPC methods become MCP tools, and request message fields become the tool args JSON Schema:
+
+```proto
+syntax = "proto3";
+
+package adversarial_dojo.workspace;
+
+service Workspace {
+  rpc ReadDoc(ReadDocRequest) returns (ToolTextResponse);
+  rpc SendEmail(SendEmailRequest) returns (ToolTextResponse);
+}
+
+message ReadDocRequest {
+  string doc_id = 1;
+}
+
+message SendEmailRequest {
+  string to = 1;
+  string body = 2;
+}
+
+message ToolTextResponse {
+  string result = 1;
+}
+```
+
+TOML/YAML/JSON surfaces can also be used directly:
 
 ```toml
 [[mcp_servers]]

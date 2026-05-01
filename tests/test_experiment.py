@@ -97,6 +97,77 @@ provider = "fake"
     assert config.tool_surface.mcp_servers[0].tools[0].args_schema["required"] == ["doc_id"]
 
 
+def test_experiment_config_loads_tool_surface_from_proto_file(tmp_path) -> None:
+    surfaces_dir = tmp_path / "surfaces"
+    surfaces_dir.mkdir()
+    (surfaces_dir / "workspace.proto").write_text(
+        """
+syntax = "proto3";
+package dojo.workspace;
+
+service GoogleWorkspace {
+  rpc SearchGmailMessages(SearchGmailMessagesRequest) returns (ToolTextResponse);
+  rpc SendGmailMessage(SendGmailMessageRequest) returns (ToolTextResponse);
+}
+
+message SearchGmailMessagesRequest {
+  string query = 1;
+  optional int32 page_size = 2;
+}
+
+message SendGmailMessageRequest {
+  string to = 1;
+  string subject = 2;
+  string body = 3;
+  BodyFormat body_format = 4;
+  repeated string attachment_ids = 5;
+}
+
+enum BodyFormat {
+  BODY_FORMAT_UNSPECIFIED = 0;
+  BODY_FORMAT_PLAIN = 1;
+  BODY_FORMAT_HTML = 2;
+}
+
+message ToolTextResponse {
+  string result = 1;
+}
+""",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        """
+id = "proto-surface"
+tool_surface_file = "surfaces/workspace.proto"
+
+[agents.attacker]
+provider = "fake"
+
+[agents.victim]
+provider = "fake"
+""",
+        encoding="utf-8",
+    )
+
+    config = ExperimentConfig.from_toml_file(config_path)
+
+    assert config.tool_surface is not None
+    server = config.tool_surface.mcp_servers[0]
+    assert server.name == "google_workspace"
+    assert [tool.name for tool in server.tools] == ["search_gmail_messages", "send_gmail_message"]
+    search_schema = server.tools[0].args_schema
+    assert search_schema["required"] == ["query"]
+    assert search_schema["properties"]["page_size"]["type"] == "integer"
+    send_schema = server.tools[1].args_schema
+    assert send_schema["properties"]["body_format"]["enum"] == [
+        "BODY_FORMAT_UNSPECIFIED",
+        "BODY_FORMAT_PLAIN",
+        "BODY_FORMAT_HTML",
+    ]
+    assert send_schema["properties"]["attachment_ids"]["items"]["type"] == "string"
+
+
 def test_experiment_config_rejects_inline_and_external_tool_surface(tmp_path) -> None:
     surface_path = tmp_path / "surface.toml"
     surface_path.write_text(

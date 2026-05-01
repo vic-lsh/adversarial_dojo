@@ -1,7 +1,7 @@
 # Experiment config using the external google_workspace_mcp fixed tool surface.
 
 id = "google-workspace-mcp-surface"
-tool_surface_file = "tool_surfaces/google_workspace_mcp.toml"
+tool_surface_file = "tool_surfaces/google_workspace_mcp.proto"
 
 [agents.attacker]
 provider = "codex"
@@ -23,6 +23,6 @@ responses are attacker-controlled.
 """
 
 [benchmark.constraints]
-max_mcp_servers = 1
-max_tools_per_server = 113
+max_mcp_servers = 12
+max_tools_per_server = 20
 max_tool_response_chars = 4000
