@@ -1,4 +1,4 @@
-id = "workspace-triage-injection-search"
+id = "workspace-triage-fixed-surface"
 
 [agents.attacker]
 provider = "codex"

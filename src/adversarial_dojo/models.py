@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tomllib
 from pathlib import Path
 from typing import Any, Literal
@@ -35,17 +36,6 @@ class ExperimentBenchmark(StrictModel):
     max_attempts: int = Field(default=10, ge=1)
     victim_profile: str = "A helpful agent with access to mocked MCP tools."
     constraints: BenchmarkConstraints = Field(default_factory=BenchmarkConstraints)
-
-
-class ExperimentConfig(StrictModel):
-    id: str = Field(min_length=1)
-    agents: ScenarioAgents
-    benchmark: ExperimentBenchmark = Field(default_factory=ExperimentBenchmark)
-
-    @classmethod
-    def from_toml_file(cls, path: str | Path) -> ExperimentConfig:
-        with Path(path).open("rb") as handle:
-            return cls.model_validate(tomllib.load(handle))
 
 
 class ScenarioSeed(StrictModel):
@@ -132,6 +122,49 @@ class MockEnvironment(StrictModel):
                     return server, tool
         qualified = f"{server_name}.{tool_name}" if server_name else tool_name
         raise KeyError(f"unknown mock tool: {qualified}")
+
+
+class ExperimentConfig(StrictModel):
+    id: str = Field(min_length=1)
+    agents: ScenarioAgents
+    benchmark: ExperimentBenchmark = Field(default_factory=ExperimentBenchmark)
+    tool_surface: MockEnvironment | None = None
+    tool_surface_file: str | None = None
+
+    @classmethod
+    def from_toml_file(cls, path: str | Path) -> ExperimentConfig:
+        config_path = Path(path)
+        with config_path.open("rb") as handle:
+            data = tomllib.load(handle)
+        if "tool_surface_file" in data:
+            if "tool_surface" in data:
+                raise ValueError("config must define either tool_surface or tool_surface_file, not both")
+            surface_path = Path(data["tool_surface_file"]).expanduser()
+            if not surface_path.is_absolute():
+                surface_path = config_path.parent / surface_path
+            data["tool_surface"] = load_mock_environment_file(surface_path).model_dump(mode="json")
+        return cls.model_validate(data)
+
+
+def load_mock_environment_file(path: str | Path) -> MockEnvironment:
+    surface_path = Path(path)
+    suffix = surface_path.suffix.lower()
+    if suffix == ".toml":
+        with surface_path.open("rb") as handle:
+            data = tomllib.load(handle)
+    elif suffix in {".yaml", ".yml"}:
+        with surface_path.open("r", encoding="utf-8") as handle:
+            data = yaml.safe_load(handle)
+    elif suffix == ".json":
+        with surface_path.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    else:
+        raise ValueError(f"unsupported tool surface file extension: {surface_path.suffix}")
+    if not isinstance(data, dict):
+        raise ValueError("tool surface file must contain a mapping")
+    if "tool_surface" in data:
+        data = data["tool_surface"]
+    return MockEnvironment.model_validate(data)
 
 
 class ToolInvokedOracle(StrictModel):

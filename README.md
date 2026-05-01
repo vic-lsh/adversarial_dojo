@@ -17,6 +17,7 @@ The TOML config is the normal entry point. It only chooses the attacker/victim a
 
 ```toml
 id = "open-ended-injection-search"
+tool_surface_file = "tool_surfaces/workspace.toml"
 
 [agents.attacker]
 provider = "codex"
@@ -37,7 +38,29 @@ max_tools_per_server = 8
 max_tool_response_chars = 4000
 ```
 
+The optional `tool_surface_file` path is resolved relative to the config file. It should contain only the mocked MCP server/tool schema surface:
+
+```toml
+[[mcp_servers]]
+name = "drive"
+
+[[mcp_servers.tools]]
+name = "read_doc"
+description = "Read a Drive document by id."
+args_schema = { type = "object", properties = { doc_id = { type = "string" } }, required = ["doc_id"], additionalProperties = false }
+
+[[mcp_servers]]
+name = "email"
+
+[[mcp_servers.tools]]
+name = "send_email"
+description = "Send an email."
+args_schema = { type = "object", properties = { to = { type = "string" }, body = { type = "string" } }, required = ["to", "body"], additionalProperties = false }
+```
+
 `attack` asks the attacker agent to generate a full indirect prompt injection scenario for each attempt. `run` replays an already generated YAML scenario.
+
+If `tool_surface` or `tool_surface_file` is present, the MCP server list, tool names, descriptions, and JSON argument schemas are fixed by the config. The attacker still controls mocked tool responses in each generated scenario, but the harness rejects unknown servers/tools and replaces any attacker-edited schema metadata with the fixed config definitions before running the victim.
 
 Run outputs are written as both aggregate files and per-attempt folders:
 

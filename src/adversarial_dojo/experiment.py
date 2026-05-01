@@ -13,6 +13,10 @@ from adversarial_dojo.models import (
     AttemptRecord,
     BenchmarkResult,
     ExperimentConfig,
+    MockEnvironment,
+    MockMcpServer,
+    MockTool,
+    ToolInvokedOracle,
     parse_attack_scenario,
 )
 from adversarial_dojo.oracles import all_oracles_passed, evaluate_oracles
@@ -135,9 +139,48 @@ def _prepare_generated_scenario(scenario: AttackScenario, config: ExperimentConf
     data = scenario.model_dump(mode="json")
     data["agents"] = config.agents.model_dump(mode="json")
     data["seed"]["max_attempts"] = 1
+    if config.tool_surface is not None:
+        data["environment"] = _apply_fixed_tool_surface(scenario.environment, config.tool_surface).model_dump(
+            mode="json"
+        )
     prepared = AttackScenario.model_validate(data)
     _validate_generated_scenario(prepared, config)
     return prepared
+
+
+def _apply_fixed_tool_surface(generated: MockEnvironment, fixed_surface: MockEnvironment) -> MockEnvironment:
+    fixed_servers = {server.name: server for server in fixed_surface.mcp_servers}
+    generated_servers = {server.name: server for server in generated.mcp_servers}
+
+    unknown_servers = sorted(set(generated_servers) - set(fixed_servers))
+    if unknown_servers:
+        raise ValueError("generated scenario uses servers outside fixed tool_surface: " + ", ".join(unknown_servers))
+
+    materialized_servers: list[MockMcpServer] = []
+    for fixed_server in fixed_surface.mcp_servers:
+        generated_server = generated_servers.get(fixed_server.name)
+        generated_tools = {tool.name: tool for tool in generated_server.tools} if generated_server is not None else {}
+        fixed_tool_names = {tool.name for tool in fixed_server.tools}
+        unknown_tools = sorted(set(generated_tools) - fixed_tool_names)
+        if unknown_tools:
+            qualified = ", ".join(f"{fixed_server.name}.{tool}" for tool in unknown_tools)
+            raise ValueError("generated scenario uses tools outside fixed tool_surface: " + qualified)
+
+        tools: list[MockTool] = []
+        for fixed_tool in fixed_server.tools:
+            generated_tool = generated_tools.get(fixed_tool.name)
+            responses = generated_tool.responses if generated_tool is not None else fixed_tool.responses
+            tools.append(
+                MockTool(
+                    name=fixed_tool.name,
+                    description=fixed_tool.description,
+                    args_schema=fixed_tool.args_schema,
+                    responses=responses,
+                )
+            )
+        materialized_servers.append(MockMcpServer(name=fixed_server.name, tools=tools))
+
+    return MockEnvironment(mcp_servers=materialized_servers)
 
 
 def _validate_generated_scenario(scenario: AttackScenario, config: ExperimentConfig) -> None:
@@ -147,6 +190,14 @@ def _validate_generated_scenario(scenario: AttackScenario, config: ExperimentCon
         raise ValueError("generated scenario must define at least one mocked MCP server")
     if server_count > constraints.max_mcp_servers:
         raise ValueError(f"generated scenario defines {server_count} MCP servers, max is {constraints.max_mcp_servers}")
+    if config.tool_surface is not None:
+        for oracle in scenario.oracles:
+            if isinstance(oracle, ToolInvokedOracle):
+                server_name, tool_name = _split_qualified_tool_name(oracle.tool_name)
+                try:
+                    scenario.environment.find_tool(server_name, tool_name)
+                except KeyError as exc:
+                    raise ValueError(f"tool_invoked oracle references tool outside fixed tool_surface: {oracle.tool_name}") from exc
     for server in scenario.environment.mcp_servers:
         tool_count = len(server.tools)
         if tool_count > constraints.max_tools_per_server:
@@ -164,6 +215,13 @@ def _validate_generated_scenario(scenario: AttackScenario, config: ExperimentCon
                         f"generated response for {server.name}.{tool.name} is {response_chars} chars, "
                         f"max is {constraints.max_tool_response_chars}"
                     )
+
+
+def _split_qualified_tool_name(tool_name: str) -> tuple[str | None, str]:
+    if "." not in tool_name:
+        return None, tool_name
+    server_name, bare_tool_name = tool_name.split(".", 1)
+    return server_name, bare_tool_name
 
 
 def _validate_agent_runtime(role: str, agent: AgentConfig) -> None:
