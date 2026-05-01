@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import tomllib
 from pathlib import Path
 from typing import Any, Literal
@@ -142,33 +141,10 @@ class ExperimentConfig(StrictModel):
             surface_path = Path(data["tool_surface_file"]).expanduser()
             if not surface_path.is_absolute():
                 surface_path = config_path.parent / surface_path
-            data["tool_surface"] = load_mock_environment_file(surface_path).model_dump(mode="json")
+            from adversarial_dojo.tool_surfaces import load_tool_surface_file
+
+            data["tool_surface"] = load_tool_surface_file(surface_path).model_dump(mode="json")
         return cls.model_validate(data)
-
-
-def load_mock_environment_file(path: str | Path) -> MockEnvironment:
-    surface_path = Path(path)
-    suffix = surface_path.suffix.lower()
-    if suffix == ".toml":
-        with surface_path.open("rb") as handle:
-            data = tomllib.load(handle)
-    elif suffix in {".yaml", ".yml"}:
-        with surface_path.open("r", encoding="utf-8") as handle:
-            data = yaml.safe_load(handle)
-    elif suffix == ".json":
-        with surface_path.open("r", encoding="utf-8") as handle:
-            data = json.load(handle)
-    elif suffix == ".proto":
-        from adversarial_dojo.proto_surface import load_proto_tool_surface
-
-        return load_proto_tool_surface(surface_path)
-    else:
-        raise ValueError(f"unsupported tool surface file extension: {surface_path.suffix}")
-    if not isinstance(data, dict):
-        raise ValueError("tool surface file must contain a mapping")
-    if "tool_surface" in data:
-        data = data["tool_surface"]
-    return MockEnvironment.model_validate(data)
 
 
 class ToolInvokedOracle(StrictModel):

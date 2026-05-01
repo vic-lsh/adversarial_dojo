@@ -6,6 +6,7 @@ import yaml
 
 from adversarial_dojo.experiment import run_attack_search
 from adversarial_dojo.models import ExperimentConfig
+from adversarial_dojo.tool_surfaces import load_tool_surface_file
 
 
 def valid_config_data():
@@ -95,6 +96,30 @@ provider = "fake"
     assert config.tool_surface is not None
     assert config.tool_surface.mcp_servers[0].name == "drive"
     assert config.tool_surface.mcp_servers[0].tools[0].args_schema["required"] == ["doc_id"]
+
+
+def test_load_tool_surface_file_loads_json_yaml_and_toml(tmp_path) -> None:
+    for suffix, content in [
+        (
+            ".json",
+            '{"mcp_servers": [{"name": "drive", "tools": [{"name": "read_doc"}]}]}',
+        ),
+        (
+            ".yaml",
+            "mcp_servers:\n- name: drive\n  tools:\n  - name: read_doc\n",
+        ),
+        (
+            ".toml",
+            '[[mcp_servers]]\nname = "drive"\n[[mcp_servers.tools]]\nname = "read_doc"\n',
+        ),
+    ]:
+        surface_path = tmp_path / f"surface{suffix}"
+        surface_path.write_text(content, encoding="utf-8")
+
+        surface = load_tool_surface_file(surface_path)
+
+        assert surface.mcp_servers[0].name == "drive"
+        assert surface.mcp_servers[0].tools[0].name == "read_doc"
 
 
 def test_experiment_config_loads_tool_surface_from_proto_file(tmp_path) -> None:
