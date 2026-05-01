@@ -24,6 +24,7 @@ class MockMcpHarness:
         if self.output_dir is not None:
             root = self.output_dir / "mcp" / f"attempt-{self.attempt}"
             root.mkdir(parents=True, exist_ok=True)
+            root = root.resolve()
         else:
             self._tmp = tempfile.TemporaryDirectory(prefix="adversarial-dojo-mcp-")
             root = Path(self._tmp.name)

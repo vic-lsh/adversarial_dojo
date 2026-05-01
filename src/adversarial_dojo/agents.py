@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,7 @@ from adversarial_dojo.models import AgentConfig, AgentRunResult, AttackScenario,
 from adversarial_dojo.mock_tools import MockToolExecutor, ToolInvocationRecorder, load_jsonl_calls
 
 AGENT_CRASH_RETRIES = 3
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 class AttackerRunner(Protocol):
@@ -255,13 +257,16 @@ class AgentshimRunner:
 
         event_recorder = AgentTrajectoryRecorder("victim", output_dir)
         with MockMcpHarness(scenario.environment, output_dir=output_dir, attempt=attempt) as harness:
+            victim_cwd = _prepare_victim_workspace(output_dir, attempt)
+            sandbox = _victim_sandbox_config(victim_cwd) if self.config.provider == "claude" else None
             agent = _make_coding_agent(
                 CodingAgent,
                 self.config,
                 mcp_servers=harness.mcp_servers,
                 event_handler=event_recorder,
+                sandbox=sandbox,
             )
-            final_text = agent.generate(scenario.seed.user_task, cwd=".", silent=True)
+            final_text = agent.generate(scenario.seed.user_task, cwd=str(victim_cwd), silent=True)
             calls = harness.collect_calls()
         if not calls:
             calls = event_recorder.tool_events
@@ -394,6 +399,31 @@ def _write_fake_trajectory(role: str, output_dir: Path | None, text: str) -> Non
     recorder = AgentTrajectoryRecorder(role, output_dir)
     recorder.on_thinking(text)
     recorder.on_usage({"provider": "fake"})
+
+
+def _write_victim_workspace_hint(output_dir: Path | None, victim_cwd: Path) -> None:
+    if output_dir is None:
+        return
+    (output_dir / "victim_workspace.txt").write_text(f"{victim_cwd}\n", encoding="utf-8")
+
+
+def _prepare_victim_workspace(output_dir: Path | None, attempt: int) -> Path:
+    victim_tmp = tempfile.mkdtemp(prefix=f"adversarial-dojo-victim-{attempt:03d}-")
+    victim_cwd = Path(victim_tmp)
+    _write_victim_workspace_hint(output_dir, victim_cwd)
+    return victim_cwd
+
+
+def _victim_sandbox_config(victim_cwd: Path):
+    from agentshim.sandbox import SandboxConfig
+
+    return SandboxConfig(
+        allow_read=[str(victim_cwd)],
+        allow_write=[str(victim_cwd)],
+        deny_read=[str(REPO_ROOT)],
+        deny_write=[str(REPO_ROOT)],
+        confine_native_reads_to=[str(victim_cwd)],
+    )
 
 
 def _recover_yaml_from_stream(output_dir: Path | None, role: str) -> str | None:

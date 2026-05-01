@@ -163,6 +163,38 @@ def test_agentshim_attacker_adapter_uses_same_session_for_missing_submission(mon
     assert response == "user_task: submitted in same session\n"
 
 
+def test_agentshim_victim_runs_in_isolated_temp_workspace(monkeypatch, tmp_path) -> None:
+    seen_cwds = []
+    seen_sandbox = []
+
+    class FakeCodingAgent:
+        def __init__(self, **kwargs):
+            self.event_handler = kwargs["event_handler"]
+            seen_sandbox.append(kwargs.get("sandbox"))
+
+        def generate(self, prompt, cwd=None, silent=False):
+            seen_cwds.append(cwd)
+            return "victim finished"
+
+    import agentshim
+
+    monkeypatch.setattr(agentshim, "CodingAgent", FakeCodingAgent)
+    config = AgentConfig(provider="claude", model="sonnet")
+    runner = AgentshimRunner(role="victim", config=config)
+    scenario = AttackScenario.model_validate(valid_scenario_data())
+
+    result = runner.run_victim(scenario, attempt=7, output_dir=tmp_path)
+
+    assert result.final_text == "victim finished"
+    assert len(seen_cwds) == 1
+    assert seen_cwds[0] != "."
+    assert "adversarial-dojo-victim-007-" in seen_cwds[0]
+    assert "/mnt/data/shli/adversarial_dojo" not in seen_cwds[0]
+    assert seen_sandbox[0] is not None
+    assert seen_sandbox[0].confine_native_reads_to == [seen_cwds[0]]
+    assert (tmp_path / "victim_workspace.txt").exists()
+
+
 def test_codex_reasoning_effort_is_injected_into_command() -> None:
     class FakeBackend:
         def _get_command(self, prompt, resume_session_id=None):
