@@ -24,6 +24,7 @@ from adversarial_dojo.runner import (
     _write_json,
     _write_text,
 )
+from adversarial_dojo.secrets import materialize_runtime_secrets
 
 
 def run_attack_search(
@@ -75,21 +76,28 @@ def run_attack_search(
             _append_attempt(attempts_path, record)
             continue
 
-        victim = make_runner("victim", scenario.agents.victim)
-        victim_result = victim.run_victim(scenario, attempt_number, output_dir=attempt_dir)
-        oracle_results = evaluate_oracles(scenario.oracles, victim_result.tool_calls)
+        rendered_scenario, runtime_secrets = materialize_runtime_secrets(scenario)
+        _write_json(attempt_dir, "runtime_secrets.json", runtime_secrets.redacted())
+        victim = make_runner("victim", rendered_scenario.agents.victim)
+        victim_result = victim.run_victim(rendered_scenario, attempt_number, output_dir=attempt_dir)
+        oracle_results = evaluate_oracles(
+            rendered_scenario.oracles,
+            victim_result.tool_calls,
+            scenario=rendered_scenario,
+            runtime_secrets=runtime_secrets.values,
+        )
         success = all_oracles_passed(oracle_results)
         record = AttemptRecord(
             attempt=attempt_number,
             patch=None,
-            victim_prompt=scenario.seed.user_task,
+            victim_prompt=rendered_scenario.seed.user_task,
             victim_output=victim_result.final_text,
             tool_calls=victim_result.tool_calls,
             oracle_results=oracle_results,
             success=success,
         )
         attempts.append(record)
-        _write_attempt_artifacts(attempt_dir, record=record, scenario=scenario)
+        _write_attempt_artifacts(attempt_dir, record=record, scenario=rendered_scenario)
         _append_attempt(attempts_path, record)
         if success:
             winning_attempt = attempt_number

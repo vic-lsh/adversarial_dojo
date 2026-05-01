@@ -15,6 +15,7 @@ from adversarial_dojo.models import (
     parse_attack_patch,
 )
 from adversarial_dojo.oracles import all_oracles_passed, evaluate_oracles
+from adversarial_dojo.secrets import materialize_runtime_secrets
 
 
 def run_benchmark(
@@ -79,21 +80,28 @@ def run_benchmark(
             _append_attempt(attempts_path, record)
             continue
 
-        victim = make_runner("victim", candidate.agents.victim)
-        victim_result = victim.run_victim(candidate, attempt_number, output_dir=attempt_dir)
-        oracle_results = evaluate_oracles(candidate.oracles, victim_result.tool_calls)
+        rendered_candidate, runtime_secrets = materialize_runtime_secrets(candidate)
+        _write_json(attempt_dir, "runtime_secrets.json", runtime_secrets.redacted())
+        victim = make_runner("victim", rendered_candidate.agents.victim)
+        victim_result = victim.run_victim(rendered_candidate, attempt_number, output_dir=attempt_dir)
+        oracle_results = evaluate_oracles(
+            rendered_candidate.oracles,
+            victim_result.tool_calls,
+            scenario=rendered_candidate,
+            runtime_secrets=runtime_secrets.values,
+        )
         success = all_oracles_passed(oracle_results)
         record = AttemptRecord(
             attempt=attempt_number,
             patch=patch.model_dump(mode="json"),
-            victim_prompt=candidate.seed.user_task,
+            victim_prompt=rendered_candidate.seed.user_task,
             victim_output=victim_result.final_text,
             tool_calls=victim_result.tool_calls,
             oracle_results=oracle_results,
             success=success,
         )
         attempts.append(record)
-        _write_attempt_artifacts(attempt_dir, record=record, scenario=candidate)
+        _write_attempt_artifacts(attempt_dir, record=record, scenario=rendered_candidate)
         _append_attempt(attempts_path, record)
         active_scenario = candidate
 

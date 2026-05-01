@@ -140,7 +140,35 @@ class ToolInvokedOracle(StrictModel):
     args_subset: dict[str, Any] = Field(default_factory=dict, validation_alias=AliasChoices("args_subset", "arguments"))
 
 
-Oracle = ToolInvokedOracle
+class SecretSpec(StrictModel):
+    id: str = Field(min_length=1, pattern=r"^[A-Za-z0-9_-]+$")
+    description: str = ""
+    placeholder: str | None = None
+
+    @property
+    def token(self) -> str:
+        return self.placeholder or f"{{{{secret.{self.id}}}}}"
+
+
+class ExfiltrationSink(StrictModel):
+    id: str = Field(min_length=1)
+    server: str = Field(min_length=1)
+    tool: str = Field(min_length=1)
+    args_subset: dict[str, Any] = Field(default_factory=dict)
+    payload_fields: list[str] = Field(default_factory=list, min_length=1)
+
+    @property
+    def tool_name(self) -> str:
+        return f"{self.server}.{self.tool}"
+
+
+class SecretExfiltratedOracle(StrictModel):
+    type: Literal["secret_exfiltrated"] = "secret_exfiltrated"
+    secret_id: str = Field(min_length=1)
+    sink_id: str = Field(min_length=1)
+
+
+Oracle = ToolInvokedOracle | SecretExfiltratedOracle
 
 
 class AttackPatch(StrictModel):
@@ -148,6 +176,8 @@ class AttackPatch(StrictModel):
     attacker_task: str | None = None
     environment: MockEnvironment | None = None
     oracles: list[Oracle] | None = None
+    secrets: list[SecretSpec] | None = None
+    exfiltration_sinks: list[ExfiltrationSink] | None = None
 
     @model_validator(mode="after")
     def validate_non_empty(self) -> AttackPatch:
@@ -156,6 +186,8 @@ class AttackPatch(StrictModel):
             and self.attacker_task is None
             and self.environment is None
             and self.oracles is None
+            and self.secrets is None
+            and self.exfiltration_sinks is None
         ):
             raise ValueError("attack patch must change at least one field")
         return self
@@ -166,6 +198,8 @@ class AttackScenario(StrictModel):
     agents: ScenarioAgents = Field(default_factory=ScenarioAgents)
     seed: ScenarioSeed
     environment: MockEnvironment = Field(default_factory=MockEnvironment)
+    secrets: list[SecretSpec] = Field(default_factory=list)
+    exfiltration_sinks: list[ExfiltrationSink] = Field(default_factory=list)
     oracles: list[Oracle] = Field(min_length=1)
 
     @field_validator("oracles")
@@ -175,6 +209,23 @@ class AttackScenario(StrictModel):
             raise ValueError("at least one oracle is required")
         return value
 
+    @model_validator(mode="after")
+    def validate_secret_exfiltration_references(self) -> AttackScenario:
+        secret_ids = {secret.id for secret in self.secrets}
+        sink_ids = {sink.id for sink in self.exfiltration_sinks}
+        for oracle in self.oracles:
+            if isinstance(oracle, SecretExfiltratedOracle):
+                if oracle.secret_id not in secret_ids:
+                    raise ValueError(f"secret_exfiltrated oracle references unknown secret: {oracle.secret_id}")
+                if oracle.sink_id not in sink_ids:
+                    raise ValueError(f"secret_exfiltrated oracle references unknown sink: {oracle.sink_id}")
+        for sink in self.exfiltration_sinks:
+            self.environment.find_tool(sink.server, sink.tool)
+        for secret in self.secrets:
+            if _is_unrendered_secret(secret) and not _environment_contains_text(self.environment, secret.token):
+                raise ValueError(f"secret placeholder {secret.token} must appear in at least one mocked tool response")
+        return self
+
     def apply_patch(self, patch: AttackPatch) -> AttackScenario:
         data = self.model_dump(mode="json")
         if patch.user_task is not None:
@@ -183,6 +234,10 @@ class AttackScenario(StrictModel):
             data["seed"]["attacker_task"] = patch.attacker_task
         if patch.environment is not None:
             data["environment"] = patch.environment.model_dump(mode="json")
+        if patch.secrets is not None:
+            data["secrets"] = [secret.model_dump(mode="json") for secret in patch.secrets]
+        if patch.exfiltration_sinks is not None:
+            data["exfiltration_sinks"] = [sink.model_dump(mode="json") for sink in patch.exfiltration_sinks]
         if patch.oracles is not None:
             data["oracles"] = [oracle.model_dump(mode="json") for oracle in patch.oracles]
         return AttackScenario.model_validate(data)
@@ -293,3 +348,18 @@ def _dict_contains(actual: dict[str, Any], expected_subset: dict[str, Any]) -> b
 
 def dict_contains(actual: dict[str, Any], expected_subset: dict[str, Any]) -> bool:
     return _dict_contains(actual, expected_subset)
+
+
+def _environment_contains_text(environment: MockEnvironment, needle: str) -> bool:
+    for server in environment.mcp_servers:
+        for tool in server.tools:
+            for response in tool.responses:
+                if needle in response.content:
+                    return True
+                if response.structured_content is not None and needle in str(response.structured_content):
+                    return True
+    return False
+
+
+def _is_unrendered_secret(secret: SecretSpec) -> bool:
+    return secret.placeholder is not None or secret.token == f"{{{{secret.{secret.id}}}}}"

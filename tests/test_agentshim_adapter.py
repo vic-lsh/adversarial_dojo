@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from adversarial_dojo.agents import AgentshimRunner, _make_coding_agent
+from adversarial_dojo.agents import AgentshimRunner, _make_coding_agent, _recover_yaml_from_stream
 from adversarial_dojo.models import AgentConfig, AttackScenario
 from tests.test_models import valid_scenario_data
 
@@ -79,3 +79,21 @@ def test_codex_reasoning_effort_is_injected_into_command() -> None:
         "gpt-5.5",
         "-",
     ]
+
+
+def test_recover_yaml_from_stream_handles_codex_suffix(tmp_path) -> None:
+    (tmp_path / "attacker_stream.txt").write_text(
+        "thinking\nid: recovered\nseed:\n  user_task: hi\n[codex turn complete]",
+        encoding="utf-8",
+    )
+
+    assert _recover_yaml_from_stream(tmp_path, "attacker") == "id: recovered\nseed:\n  user_task: hi"
+
+
+def test_recover_yaml_from_events_handles_tool_result_stdout(tmp_path) -> None:
+    (tmp_path / "attacker_events.jsonl").write_text(
+        '{"event": "tool_result", "stdout": "validated\\nid: recovered\\nseed:\\n  user_task: hi"}\n',
+        encoding="utf-8",
+    )
+
+    assert _recover_yaml_from_stream(tmp_path, "attacker") == "id: recovered\nseed:\n  user_task: hi"
