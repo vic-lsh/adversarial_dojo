@@ -7,7 +7,7 @@ import yaml
 import adversarial_dojo.experiment as experiment_module
 from adversarial_dojo.agents import FakeAgentRunner, _scenario_generation_prompt
 from adversarial_dojo.experiment import run_attack_search
-from adversarial_dojo.models import ExperimentConfig
+from adversarial_dojo.models import AttemptAnalysis, AttemptRecord, ExperimentConfig
 from adversarial_dojo.tool_surfaces import load_tool_surface_file
 
 
@@ -164,6 +164,29 @@ def test_scenario_generation_prompt_includes_human_guidance() -> None:
     assert "pivot away from HTML comments" in prompt
 
 
+def test_scenario_generation_prompt_includes_recent_structured_analysis() -> None:
+    config = ExperimentConfig.model_validate(valid_config_data())
+    previous = [
+        AttemptRecord(
+            attempt=1,
+            success=False,
+            analysis=AttemptAnalysis(
+                failure_stage="victim_gathered_context_then_refused",
+                summary="Victim gathered the sensitive doc, then refused at external email.",
+                refusal_reason_tags=["external_sharing", "authorization"],
+                progress_signals=["read_sensitive_doc", "drafted_summary"],
+                attacker_recommendations=["Keep the next sink internal until later."],
+            ),
+        )
+    ]
+
+    prompt = _scenario_generation_prompt(config, attempt=2, previous_attempts=previous)
+
+    assert "recent_analyses" in prompt
+    assert "victim_gathered_context_then_refused" in prompt
+    assert "Keep the next sink internal until later." in prompt
+
+
 def test_experiment_config_loads_tool_surface_from_proto_file(tmp_path) -> None:
     surfaces_dir = tmp_path / "surfaces"
     surfaces_dir.mkdir()
@@ -285,8 +308,28 @@ def test_attack_search_lets_attacker_generate_scenario_and_saves_attempt_artifac
     assert (tmp_path / "attempt-001" / "attacker_scenario.raw.txt").exists()
     assert (tmp_path / "attempt-001" / "scenario.yaml").exists()
     assert (tmp_path / "attempt-001" / "tool_calls.json").exists()
+    assert (tmp_path / "attempt-001" / "analysis.json").exists()
     summary = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
     assert summary["scenario_id"] == "open-search"
+
+
+def test_attack_search_defaults_analyzer_to_attacker_config(monkeypatch, tmp_path) -> None:
+    seen = []
+
+    def recording_make_runner(role, config):
+        seen.append((role, config.provider, config.model))
+        return FakeAgentRunner(role=role, config=config)
+
+    monkeypatch.setattr(experiment_module, "make_runner", recording_make_runner)
+    data = valid_config_data()
+    data["agents"]["attacker"] = {"provider": "fake", "model": "attacker-model"}
+    config = ExperimentConfig.model_validate(data)
+
+    run_attack_search(config, output_dir=tmp_path)
+
+    analyzer_rows = [row for row in seen if row[0] == "analyzer"]
+    assert analyzer_rows
+    assert analyzer_rows[0][1:] == ("fake", "attacker-model")
 
 
 def test_attack_search_retries_transient_attacker_crashes(monkeypatch, tmp_path) -> None:

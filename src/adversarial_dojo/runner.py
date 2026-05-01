@@ -208,6 +208,7 @@ def _write_attempt_artifacts(
         "oracle_results.json",
         [result.model_dump(mode="json") for result in record.oracle_results],
     )
+    _write_json(attempt_dir, "analysis.json", record.analysis.model_dump(mode="json") if record.analysis else None)
     _write_text(attempt_dir, "victim_prompt.txt", record.victim_prompt or "")
     _write_text(attempt_dir, "victim_output.txt", record.victim_output)
     if scenario is not None:

@@ -6,13 +6,22 @@ from typing import Any, Literal
 import yaml
 
 from adversarial_dojo.mcp_harness import MockMcpHarness
-from adversarial_dojo.models import AttackPatch, AttackScenario, MockEnvironment, MockMcpServer, MockTool, ToolCallRecord
+from adversarial_dojo.models import (
+    AttackPatch,
+    AttackScenario,
+    AttemptAnalysis,
+    MockEnvironment,
+    MockMcpServer,
+    MockTool,
+    ToolCallRecord,
+)
 
 SUBMISSION_SERVER_NAME = "adversarial_dojo_submission"
 SUBMIT_SCENARIO_TOOL = "submit_attack_scenario"
 SUBMIT_PATCH_TOOL = "submit_attack_patch"
+SUBMIT_ANALYSIS_TOOL = "submit_attempt_analysis"
 
-SubmissionKind = Literal["scenario", "patch"]
+SubmissionKind = Literal["scenario", "patch", "analysis"]
 
 
 class AttackerSubmissionHarness:
@@ -36,7 +45,7 @@ class AttackerSubmissionHarness:
 
 
 def extract_submission(calls: list[ToolCallRecord], kind: SubmissionKind) -> dict[str, Any] | None:
-    tool_name = SUBMIT_SCENARIO_TOOL if kind == "scenario" else SUBMIT_PATCH_TOOL
+    tool_name = _tool_name(kind)
     for call in reversed(calls):
         if call.server_name != SUBMISSION_SERVER_NAME:
             continue
@@ -51,18 +60,20 @@ def submission_to_text(submission: dict[str, Any]) -> str:
 
 
 def submission_tool_name(kind: SubmissionKind) -> str:
-    tool_name = SUBMIT_SCENARIO_TOOL if kind == "scenario" else SUBMIT_PATCH_TOOL
-    return f"{SUBMISSION_SERVER_NAME}.{tool_name}"
+    return f"{SUBMISSION_SERVER_NAME}.{_tool_name(kind)}"
 
 
 def _submission_environment(kind: SubmissionKind) -> MockEnvironment:
-    tool_name = SUBMIT_SCENARIO_TOOL if kind == "scenario" else SUBMIT_PATCH_TOOL
-    model = AttackScenario if kind == "scenario" else AttackPatch
-    description = (
-        "Submit the complete AttackScenario object. This is the only accepted way to return a candidate scenario."
-        if kind == "scenario"
-        else "Submit the complete AttackPatch object. This is the only accepted way to return a patch proposal."
-    )
+    tool_name = _tool_name(kind)
+    if kind == "scenario":
+        model = AttackScenario
+        description = "Submit the complete AttackScenario object. This is the only accepted way to return a candidate scenario."
+    elif kind == "patch":
+        model = AttackPatch
+        description = "Submit the complete AttackPatch object. This is the only accepted way to return a patch proposal."
+    else:
+        model = AttemptAnalysis
+        description = "Submit the complete AttemptAnalysis object. This is the only accepted way to return structured post-attempt analysis."
     return MockEnvironment(
         mcp_servers=[
             MockMcpServer(
@@ -78,3 +89,11 @@ def _submission_environment(kind: SubmissionKind) -> MockEnvironment:
             )
         ]
     )
+
+
+def _tool_name(kind: SubmissionKind) -> str:
+    if kind == "scenario":
+        return SUBMIT_SCENARIO_TOOL
+    if kind == "patch":
+        return SUBMIT_PATCH_TOOL
+    return SUBMIT_ANALYSIS_TOOL

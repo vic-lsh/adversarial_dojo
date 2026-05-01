@@ -11,6 +11,7 @@ from adversarial_dojo.models import (
     AgentConfig,
     AttackScenario,
     AttemptRecord,
+    AttemptAnalysis,
     BenchmarkResult,
     ExperimentConfig,
     MockEnvironment,
@@ -54,12 +55,14 @@ def run_attack_search(
     attempts: list[AttemptRecord] = _load_attempts(attempts_path) if resume else []
     winning_attempt: int | None = next((attempt.attempt for attempt in attempts if attempt.success), None)
     start_attempt = max((attempt.attempt for attempt in attempts), default=0) + 1
+    analyzer_config = active_config.agents.analyzer or active_config.agents.attacker
 
     for attempt_number in range(start_attempt, active_config.benchmark.max_attempts + 1):
         if winning_attempt is not None:
             break
         attempt_dir = _attempt_dir(out_path, attempt_number)
         attacker = make_runner("attacker", active_config.agents.attacker)
+        analyzer = make_runner("analyzer", analyzer_config)
         scenario = None
         scenario_error = None
         try:
@@ -98,6 +101,15 @@ def run_attack_search(
 
         if scenario is None:
             record = AttemptRecord(attempt=attempt_number, patch_error=scenario_error)
+            _write_attempt_artifacts(attempt_dir, record=record, scenario=None)
+            _attach_attempt_analysis(
+                analyzer=analyzer,
+                config=active_config,
+                scenario=None,
+                record=record,
+                attempt_number=attempt_number,
+                attempt_dir=attempt_dir,
+            )
             attempts.append(record)
             _write_attempt_artifacts(attempt_dir, record=record, scenario=None)
             _append_attempt(attempts_path, record)
@@ -115,6 +127,15 @@ def run_attack_search(
                 attempt=attempt_number,
                 patch_error=f"victim crashed: {exc}",
                 victim_prompt=rendered_scenario.seed.user_task,
+            )
+            _write_attempt_artifacts(attempt_dir, record=record, scenario=rendered_scenario)
+            _attach_attempt_analysis(
+                analyzer=analyzer,
+                config=active_config,
+                scenario=rendered_scenario,
+                record=record,
+                attempt_number=attempt_number,
+                attempt_dir=attempt_dir,
             )
             attempts.append(record)
             _write_attempt_artifacts(attempt_dir, record=record, scenario=rendered_scenario)
@@ -135,6 +156,15 @@ def run_attack_search(
             tool_calls=victim_result.tool_calls,
             oracle_results=oracle_results,
             success=success,
+        )
+        _write_attempt_artifacts(attempt_dir, record=record, scenario=rendered_scenario)
+        _attach_attempt_analysis(
+            analyzer=analyzer,
+            config=active_config,
+            scenario=rendered_scenario,
+            record=record,
+            attempt_number=attempt_number,
+            attempt_dir=attempt_dir,
         )
         attempts.append(record)
         _write_attempt_artifacts(attempt_dir, record=record, scenario=rendered_scenario)
@@ -179,6 +209,36 @@ def _with_agent_crash_retries(call):
     if isinstance(last_exc, RuntimeError):
         raise last_exc
     raise RuntimeError(str(last_exc)) from last_exc
+
+
+def _attach_attempt_analysis(
+    *,
+    analyzer,
+    config: ExperimentConfig,
+    scenario: AttackScenario | None,
+    record: AttemptRecord,
+    attempt_number: int,
+    attempt_dir: Path | None,
+) -> None:
+    if attempt_dir is None:
+        return
+    try:
+        record.analysis = _with_agent_crash_retries(
+            lambda: analyzer.analyze_attempt(
+                config=config,
+                scenario=scenario,
+                record=record,
+                attempt=attempt_number,
+                attempt_dir=attempt_dir,
+                output_dir=attempt_dir,
+            )
+        )
+    except RuntimeError as exc:
+        record.analysis = AttemptAnalysis(
+            failure_stage="other",
+            summary="analyzer crashed",
+            freeform_notes=str(exc),
+        )
 
 
 def apply_config_overrides(config: ExperimentConfig, overrides: dict[str, Any]) -> ExperimentConfig:
