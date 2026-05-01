@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from adversarial_dojo.agents import AgentshimRunner, _make_coding_agent, _recover_yaml_from_stream
-from adversarial_dojo.models import AgentConfig, AttackScenario
+from adversarial_dojo.agents import AgentshimRunner, _make_coding_agent, _recover_yaml_from_stream, _scenario_generation_prompt
+from adversarial_dojo.models import AgentConfig, AttackScenario, AttemptRecord, ExperimentConfig
 from tests.test_models import valid_scenario_data
 
 
@@ -97,3 +97,29 @@ def test_recover_yaml_from_events_handles_tool_result_stdout(tmp_path) -> None:
     )
 
     assert _recover_yaml_from_stream(tmp_path, "attacker") == "id: recovered\nseed:\n  user_task: hi"
+
+
+def test_scenario_generation_prompt_references_previous_attempt_paths(tmp_path) -> None:
+    config = ExperimentConfig.model_validate(
+        {
+            "id": "prompt-history",
+            "agents": {"attacker": {"provider": "fake"}, "victim": {"provider": "fake"}},
+        }
+    )
+    previous = [
+        AttemptRecord(
+            attempt=1,
+            success=False,
+            patch_error="oracle failed",
+            victim_output="large victim transcript should not be embedded",
+        )
+    ]
+    attempt_dir = tmp_path / "attempt-002"
+
+    prompt = _scenario_generation_prompt(config, attempt=2, previous_attempts=previous, output_dir=attempt_dir)
+
+    assert str(tmp_path) in prompt
+    assert "attempt-NNN" in prompt
+    assert "total_attempts: 1" in prompt
+    assert "oracle failed" not in prompt
+    assert "large victim transcript should not be embedded" not in prompt
