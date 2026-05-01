@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from adversarial_dojo.agents import make_runner
+from adversarial_dojo.agents import AGENT_CRASH_RETRIES, make_runner
 from adversarial_dojo.models import (
     AgentConfig,
     AttackScenario,
@@ -42,23 +42,39 @@ def run_benchmark(
         patch = None
         patch_error = None
         repair_text = None
-        patch_text = attacker.propose_patch(active_scenario, attempt_number, attempts, output_dir=attempt_dir)
+        try:
+            patch_text = _with_agent_crash_retries(
+                lambda: attacker.propose_patch(active_scenario, attempt_number, attempts, output_dir=attempt_dir)
+            )
+        except RuntimeError as exc:
+            record = AttemptRecord(attempt=attempt_number, patch_error=f"attacker crashed: {exc}")
+            attempts.append(record)
+            _write_attempt_artifacts(attempt_dir, record=record, scenario=None)
+            _append_attempt(attempts_path, record)
+            continue
         _write_text(attempt_dir, "attacker_patch.raw.txt", patch_text)
         try:
             patch = parse_attack_patch(patch_text)
         except ValueError as exc:
-            repair_text = attacker.propose_patch(
-                active_scenario,
-                attempt_number,
-                attempts,
-                repair_error=str(exc),
-                output_dir=attempt_dir,
-            )
-            _write_text(attempt_dir, "attacker_repair_patch.raw.txt", repair_text)
             try:
-                patch = parse_attack_patch(repair_text)
-            except ValueError as repair_exc:
-                patch_error = str(repair_exc)
+                repair_text = _with_agent_crash_retries(
+                    lambda: attacker.propose_patch(
+                        active_scenario,
+                        attempt_number,
+                        attempts,
+                        repair_error=str(exc),
+                        output_dir=attempt_dir,
+                    )
+                )
+            except RuntimeError as crash_exc:
+                patch_error = f"attacker repair crashed: {crash_exc}"
+                repair_text = ""
+            _write_text(attempt_dir, "attacker_repair_patch.raw.txt", repair_text)
+            if repair_text:
+                try:
+                    patch = parse_attack_patch(repair_text)
+                except ValueError as repair_exc:
+                    patch_error = str(repair_exc)
 
         if patch is None:
             record = AttemptRecord(attempt=attempt_number, patch_error=patch_error)
@@ -83,7 +99,22 @@ def run_benchmark(
         rendered_candidate, runtime_secrets = materialize_runtime_secrets(candidate)
         _write_json(attempt_dir, "runtime_secrets.json", runtime_secrets.redacted())
         victim = make_runner("victim", rendered_candidate.agents.victim)
-        victim_result = victim.run_victim(rendered_candidate, attempt_number, output_dir=attempt_dir)
+        try:
+            victim_result = _with_agent_crash_retries(
+                lambda: victim.run_victim(rendered_candidate, attempt_number, output_dir=attempt_dir)
+            )
+        except RuntimeError as exc:
+            record = AttemptRecord(
+                attempt=attempt_number,
+                patch=patch.model_dump(mode="json"),
+                patch_error=f"victim crashed: {exc}",
+                victim_prompt=rendered_candidate.seed.user_task,
+            )
+            attempts.append(record)
+            _write_attempt_artifacts(attempt_dir, record=record, scenario=rendered_candidate)
+            _append_attempt(attempts_path, record)
+            active_scenario = candidate
+            continue
         oracle_results = evaluate_oracles(
             rendered_candidate.oracles,
             victim_result.tool_calls,
@@ -121,6 +152,19 @@ def run_benchmark(
         summary = result.model_dump(mode="json", exclude={"attempts"})
         (out_path / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     return result
+
+
+def _with_agent_crash_retries(call):
+    last_exc: Exception | None = None
+    for _ in range(AGENT_CRASH_RETRIES + 1):
+        try:
+            return call()
+        except Exception as exc:
+            last_exc = exc
+    assert last_exc is not None
+    if isinstance(last_exc, RuntimeError):
+        raise last_exc
+    raise RuntimeError(str(last_exc)) from last_exc
 
 
 def _append_attempt(path: Path | None, record: AttemptRecord) -> None:

@@ -12,6 +12,8 @@ import yaml
 from adversarial_dojo.models import AgentConfig, AgentRunResult, AttackScenario, ExperimentConfig, ToolCallRecord
 from adversarial_dojo.mock_tools import MockToolExecutor, ToolInvocationRecorder, load_jsonl_calls
 
+AGENT_CRASH_RETRIES = 3
+
 
 class AttackerRunner(Protocol):
     def propose_patch(
@@ -273,7 +275,7 @@ class AgentshimRunner:
         agent = _make_coding_agent(CodingAgent, self.config, event_handler=event_recorder)
         try:
             return agent.generate(prompt, cwd=".", silent=True)
-        except RuntimeError:
+        except Exception:
             recovered = _recover_yaml_from_stream(output_dir, "attacker")
             if recovered is not None:
                 return recovered

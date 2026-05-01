@@ -37,6 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     attack_parser.add_argument("--attacker-model", default=None)
     attack_parser.add_argument("--victim-provider", default=None)
     attack_parser.add_argument("--victim-model", default=None)
+    attack_parser.add_argument("--resume", action="store_true", help="Resume an existing attack run directory.")
 
     args = parser.parse_args(argv)
 
@@ -63,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"invalid config: {exc}", file=sys.stderr)
             return 2
         out = args.out or str(Path("runs") / config.id)
-        result = run_attack_search(config, overrides=overrides, output_dir=out)
+        result = run_attack_search(config, overrides=overrides, output_dir=out, resume=args.resume)
         print(json.dumps(result.model_dump(mode="json", exclude={"attempts"}), indent=2))
         return 0
 
