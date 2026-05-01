@@ -75,7 +75,7 @@ def run_attack_search(
         _write_text(attempt_dir, "attacker_scenario.raw.txt", raw_scenario)
         try:
             scenario = _prepare_generated_scenario(parse_attack_scenario(raw_scenario), active_config)
-        except (ValueError, ValidationError) as exc:
+        except (KeyError, ValueError, ValidationError) as exc:
             try:
                 repaired = _with_agent_crash_retries(
                     lambda: attacker.propose_scenario(
@@ -93,7 +93,7 @@ def run_attack_search(
             if repaired:
                 try:
                     scenario = _prepare_generated_scenario(parse_attack_scenario(repaired), active_config)
-                except (ValueError, ValidationError) as repair_exc:
+                except (KeyError, ValueError, ValidationError) as repair_exc:
                     scenario_error = str(repair_exc)
 
         if scenario is None:

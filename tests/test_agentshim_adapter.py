@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from adversarial_dojo.agents import AgentshimRunner, _make_coding_agent, _recover_yaml_from_stream, _scenario_generation_prompt
+from adversarial_dojo.attacker_submission import SUBMISSION_SERVER_NAME, SUBMIT_PATCH_TOOL, SUBMIT_SCENARIO_TOOL
 from adversarial_dojo.models import AgentConfig, AttackScenario, AttemptRecord, ExperimentConfig
 from tests.test_models import valid_scenario_data
 
@@ -11,10 +12,15 @@ def test_agentshim_attacker_adapter_wires_provider_model_and_backend_kwargs(monk
     class FakeCodingAgent:
         def __init__(self, **kwargs):
             constructed.update(kwargs)
+            self.event_handler = kwargs["event_handler"]
 
         def generate(self, prompt, cwd=None, silent=False):
             assert "AttackPatch" in prompt
-            return "user_task: patched"
+            self.event_handler.on_tool_call(
+                f"mcp__{SUBMISSION_SERVER_NAME}__{SUBMIT_PATCH_TOOL}",
+                {"user_task": "patched"},
+            )
+            return "submitted"
 
     import agentshim
 
@@ -25,10 +31,11 @@ def test_agentshim_attacker_adapter_wires_provider_model_and_backend_kwargs(monk
 
     response = runner.propose_patch(scenario, attempt=1, previous_attempts=[])
 
-    assert response == "user_task: patched"
+    assert response == "user_task: patched\n"
     assert constructed["provider"] == "codex"
     assert constructed["model"] == "gpt-test"
     assert constructed["backend_kwargs"] == {"x": 1}
+    assert constructed["mcp_servers"][0].name == SUBMISSION_SERVER_NAME
 
 
 def test_agentshim_attacker_adapter_writes_streaming_trajectory(monkeypatch, tmp_path) -> None:
@@ -38,6 +45,10 @@ def test_agentshim_attacker_adapter_writes_streaming_trajectory(monkeypatch, tmp
 
         def generate(self, prompt, cwd=None, silent=False):
             self.event_handler.on_thinking("drafting scenario\n")
+            self.event_handler.on_tool_call(
+                f"mcp__{SUBMISSION_SERVER_NAME}__{SUBMIT_PATCH_TOOL}",
+                {"user_task": "patched"},
+            )
             self.event_handler.on_usage({"input_tokens": 1, "output_tokens": 2})
             return "user_task: patched"
 
@@ -54,6 +65,102 @@ def test_agentshim_attacker_adapter_writes_streaming_trajectory(monkeypatch, tmp
     events = (tmp_path / "attacker_events.jsonl").read_text(encoding="utf-8")
     assert '"event": "thinking"' in events
     assert '"event": "usage"' in events
+
+
+def test_agentshim_attacker_adapter_asks_again_when_submission_tool_is_missing(monkeypatch) -> None:
+    prompts = []
+
+    class FakeCodingAgent:
+        def __init__(self, **kwargs):
+            self.event_handler = kwargs["event_handler"]
+
+        def generate(self, prompt, cwd=None, silent=False):
+            prompts.append(prompt)
+            if len(prompts) == 2:
+                self.event_handler.on_tool_call(
+                    f"mcp__{SUBMISSION_SERVER_NAME}__{SUBMIT_SCENARIO_TOOL}",
+                    {
+                        "id": "submitted",
+                        "seed": {
+                            "user_task": "Do work.",
+                            "attacker_task": "Trigger sink.",
+                            "max_attempts": 1,
+                        },
+                        "environment": {
+                            "mcp_servers": [
+                                {
+                                    "name": "email",
+                                    "tools": [
+                                        {
+                                            "name": "send_email",
+                                            "args_schema": {"type": "object", "additionalProperties": True},
+                                        }
+                                    ],
+                                }
+                            ]
+                        },
+                        "oracles": [{"type": "tool_invoked", "tool_name": "email.send_email"}],
+                    },
+                )
+            return "not submitted"
+
+    import agentshim
+
+    monkeypatch.setattr(agentshim, "CodingAgent", FakeCodingAgent)
+    config = AgentConfig(provider="claude", model="opus")
+    experiment = ExperimentConfig.model_validate(
+        {
+            "id": "submit-test",
+            "agents": {"attacker": {"provider": "claude"}, "victim": {"provider": "fake"}},
+        }
+    )
+    runner = AgentshimRunner(role="attacker", config=config)
+
+    response = runner.propose_scenario(experiment, attempt=1, previous_attempts=[])
+
+    assert len(prompts) == 2
+    assert "did not call the required MCP tool" in prompts[1]
+    assert "id: submitted" in response
+
+
+def test_agentshim_attacker_adapter_uses_same_session_for_missing_submission(monkeypatch) -> None:
+    prompts = []
+    sessions_started = []
+
+    class FakeSession:
+        def __init__(self, event_handler):
+            self.event_handler = event_handler
+
+        def generate(self, prompt, cwd=None, timeout=None, silent=None, on_process_started=None):
+            prompts.append(prompt)
+            if len(prompts) == 2:
+                self.event_handler.on_tool_call(
+                    f"mcp__{SUBMISSION_SERVER_NAME}__{SUBMIT_PATCH_TOOL}",
+                    {"user_task": "submitted in same session"},
+                )
+            return "text response"
+
+    class FakeCodingAgent:
+        def __init__(self, **kwargs):
+            self.event_handler = kwargs["event_handler"]
+
+        def start_session(self, cwd=None, timeout=300, silent=False):
+            sessions_started.append((cwd, silent))
+            return FakeSession(self.event_handler)
+
+    import agentshim
+
+    monkeypatch.setattr(agentshim, "CodingAgent", FakeCodingAgent)
+    config = AgentConfig(provider="claude", model="opus")
+    runner = AgentshimRunner(role="attacker", config=config)
+    scenario = AttackScenario.model_validate(valid_scenario_data())
+
+    response = runner.propose_patch(scenario, attempt=1, previous_attempts=[])
+
+    assert sessions_started == [(".", True)]
+    assert len(prompts) == 2
+    assert "did not call the required MCP tool" in prompts[1]
+    assert response == "user_task: submitted in same session\n"
 
 
 def test_codex_reasoning_effort_is_injected_into_command() -> None:
