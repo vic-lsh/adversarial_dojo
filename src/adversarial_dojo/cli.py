@@ -123,7 +123,7 @@ def _attack_overrides(args: argparse.Namespace) -> dict[str, str | None]:
     if args.attacker_guidance_file:
         guidance_parts.append(Path(args.attacker_guidance_file).read_text(encoding="utf-8"))
     if guidance_parts:
-        overrides["attacker_guidance"] = "\n\n".join(part.strip() for part in guidance_parts if part.strip())
+        overrides["red_team_guidance"] = "\n\n".join(part.strip() for part in guidance_parts if part.strip())
     return overrides
 
 

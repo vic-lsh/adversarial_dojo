@@ -55,33 +55,33 @@ def run_attack_search(
     attempts: list[AttemptRecord] = _load_attempts(attempts_path) if resume else []
     winning_attempt: int | None = next((attempt.attempt for attempt in attempts if attempt.success), None)
     start_attempt = max((attempt.attempt for attempt in attempts), default=0) + 1
-    analyzer_config = active_config.agents.analyzer or active_config.agents.attacker
+    analyzer_config = active_config.agents.analyzer or active_config.agents.red_team
 
     for attempt_number in range(start_attempt, active_config.benchmark.max_attempts + 1):
         if winning_attempt is not None:
             break
         attempt_dir = _attempt_dir(out_path, attempt_number)
-        attacker = make_runner("attacker", active_config.agents.attacker)
+        red_team = make_runner("red_team", active_config.agents.red_team)
         analyzer = make_runner("analyzer", analyzer_config)
         scenario = None
         scenario_error = None
         try:
             raw_scenario = _with_agent_crash_retries(
-                lambda: attacker.propose_scenario(active_config, attempt_number, attempts, output_dir=attempt_dir)
+                lambda: red_team.propose_scenario(active_config, attempt_number, attempts, output_dir=attempt_dir)
             )
         except RuntimeError as exc:
-            record = AttemptRecord(attempt=attempt_number, patch_error=f"attacker crashed: {exc}")
+            record = AttemptRecord(attempt=attempt_number, patch_error=f"red team agent crashed: {exc}")
             attempts.append(record)
             _write_attempt_artifacts(attempt_dir, record=record, scenario=None)
             _append_attempt(attempts_path, record)
             continue
-        _write_text(attempt_dir, "attacker_scenario.raw.txt", raw_scenario)
+        _write_text(attempt_dir, "red_team_scenario.raw.txt", raw_scenario)
         try:
             scenario = _prepare_generated_scenario(parse_attack_scenario(raw_scenario), active_config)
         except (KeyError, ValueError, ValidationError) as exc:
             try:
                 repaired = _with_agent_crash_retries(
-                    lambda: attacker.propose_scenario(
+                    lambda: red_team.propose_scenario(
                         active_config,
                         attempt_number,
                         attempts,
@@ -90,9 +90,9 @@ def run_attack_search(
                     )
                 )
             except RuntimeError as crash_exc:
-                scenario_error = f"attacker repair crashed: {crash_exc}"
+                scenario_error = f"red team agent repair crashed: {crash_exc}"
                 repaired = ""
-            _write_text(attempt_dir, "attacker_repair_scenario.raw.txt", repaired)
+            _write_text(attempt_dir, "red_team_repair_scenario.raw.txt", repaired)
             if repaired:
                 try:
                     scenario = _prepare_generated_scenario(parse_attack_scenario(repaired), active_config)
@@ -245,16 +245,16 @@ def apply_config_overrides(config: ExperimentConfig, overrides: dict[str, Any]) 
     if not overrides:
         return config
     data = config.model_dump(mode="json")
-    _override_agent(data["agents"]["attacker"], overrides, "attacker")
+    _override_agent(data["agents"]["red_team"], overrides, "red_team")
     _override_agent(data["agents"]["victim"], overrides, "victim")
-    attacker_guidance = overrides.get("attacker_guidance")
-    if attacker_guidance is not None:
-        data["benchmark"]["attacker_guidance"] = attacker_guidance
+    red_team_guidance = overrides.get("red_team_guidance", overrides.get("attacker_guidance"))
+    if red_team_guidance is not None:
+        data["benchmark"]["red_team_guidance"] = red_team_guidance
     return ExperimentConfig.model_validate(data)
 
 
 def validate_supported_config(config: ExperimentConfig) -> None:
-    for role, agent in (("attacker", config.agents.attacker), ("victim", config.agents.victim)):
+    for role, agent in (("red_team", config.agents.red_team), ("victim", config.agents.victim)):
         _validate_agent_runtime(role, agent)
 
 

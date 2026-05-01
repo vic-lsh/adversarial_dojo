@@ -31,7 +31,7 @@ def test_agentshim_attacker_adapter_wires_provider_model_and_backend_kwargs(monk
 
     monkeypatch.setattr(agentshim, "CodingAgent", FakeCodingAgent)
     config = AgentConfig(provider="codex", model="gpt-test", backend_kwargs={"x": 1})
-    runner = AgentshimRunner(role="attacker", config=config)
+    runner = AgentshimRunner(role="red_team", config=config)
     scenario = AttackScenario.model_validate(valid_scenario_data())
 
     response = runner.propose_patch(scenario, attempt=1, previous_attempts=[])
@@ -61,13 +61,13 @@ def test_agentshim_attacker_adapter_writes_streaming_trajectory(monkeypatch, tmp
 
     monkeypatch.setattr(agentshim, "CodingAgent", FakeCodingAgent)
     config = AgentConfig(provider="codex", model="gpt-test")
-    runner = AgentshimRunner(role="attacker", config=config)
+    runner = AgentshimRunner(role="red_team", config=config)
     scenario = AttackScenario.model_validate(valid_scenario_data())
 
     runner.propose_patch(scenario, attempt=1, previous_attempts=[], output_dir=tmp_path)
 
-    assert (tmp_path / "attacker_stream.txt").read_text(encoding="utf-8") == "drafting scenario\n"
-    events = (tmp_path / "attacker_events.jsonl").read_text(encoding="utf-8")
+    assert (tmp_path / "red_team_stream.txt").read_text(encoding="utf-8") == "drafting scenario\n"
+    events = (tmp_path / "red_team_events.jsonl").read_text(encoding="utf-8")
     assert '"event": "thinking"' in events
     assert '"event": "usage"' in events
 
@@ -119,7 +119,7 @@ def test_agentshim_attacker_adapter_asks_again_when_submission_tool_is_missing(m
             "agents": {"attacker": {"provider": "claude"}, "victim": {"provider": "fake"}},
         }
     )
-    runner = AgentshimRunner(role="attacker", config=config)
+    runner = AgentshimRunner(role="red_team", config=config)
 
     response = runner.propose_scenario(experiment, attempt=1, previous_attempts=[])
 
@@ -204,7 +204,7 @@ def test_agentshim_attacker_adapter_uses_same_session_for_missing_submission(mon
 
     monkeypatch.setattr(agentshim, "CodingAgent", FakeCodingAgent)
     config = AgentConfig(provider="claude", model="opus")
-    runner = AgentshimRunner(role="attacker", config=config)
+    runner = AgentshimRunner(role="red_team", config=config)
     scenario = AttackScenario.model_validate(valid_scenario_data())
 
     response = runner.propose_patch(scenario, attempt=1, previous_attempts=[])
@@ -273,7 +273,7 @@ def test_codex_reasoning_effort_is_injected_into_command() -> None:
 
 
 def test_recover_yaml_from_stream_handles_codex_suffix(tmp_path) -> None:
-    (tmp_path / "attacker_stream.txt").write_text(
+    (tmp_path / "red_team_stream.txt").write_text(
         "thinking\nid: recovered\nseed:\n  user_task: hi\n[codex turn complete]",
         encoding="utf-8",
     )
@@ -282,7 +282,7 @@ def test_recover_yaml_from_stream_handles_codex_suffix(tmp_path) -> None:
 
 
 def test_recover_yaml_from_events_handles_tool_result_stdout(tmp_path) -> None:
-    (tmp_path / "attacker_events.jsonl").write_text(
+    (tmp_path / "red_team_events.jsonl").write_text(
         '{"event": "tool_result", "stdout": "validated\\nid: recovered\\nseed:\\n  user_task: hi"}\n',
         encoding="utf-8",
     )

@@ -97,7 +97,7 @@ victim_profile = "A helpful agent with mocked MCP tools."
     exit_code = main(["attack", str(config_path), "--out", str(out_dir)])
 
     assert exit_code == 0
-    assert (out_dir / "attempt-001" / "attacker_scenario.raw.txt").exists()
+    assert (out_dir / "attempt-001" / "red_team_scenario.raw.txt").exists()
     assert (out_dir / "attempt-001" / "scenario.yaml").exists()
     assert json.loads((out_dir / "summary.json").read_text(encoding="utf-8"))["success"] is True
 
@@ -140,6 +140,6 @@ attacker_guidance = "Avoid explicit automation banners."
 
     assert exit_code == 0
     written = json.loads((out_dir / "config.json").read_text(encoding="utf-8"))
-    assert written["benchmark"]["attacker_guidance"] == (
+    assert written["benchmark"]["red_team_guidance"] == (
         "Prefer benign review tasks.\n\nUse more natural forwarding tasks."
     )

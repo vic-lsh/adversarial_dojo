@@ -38,27 +38,27 @@ def run_benchmark(
 
     for attempt_number in range(1, active_scenario.seed.max_attempts + 1):
         attempt_dir = _attempt_dir(out_path, attempt_number)
-        attacker = make_runner("attacker", active_scenario.agents.attacker)
+        red_team = make_runner("red_team", active_scenario.agents.red_team)
         patch = None
         patch_error = None
         repair_text = None
         try:
             patch_text = _with_agent_crash_retries(
-                lambda: attacker.propose_patch(active_scenario, attempt_number, attempts, output_dir=attempt_dir)
+                lambda: red_team.propose_patch(active_scenario, attempt_number, attempts, output_dir=attempt_dir)
             )
         except RuntimeError as exc:
-            record = AttemptRecord(attempt=attempt_number, patch_error=f"attacker crashed: {exc}")
+            record = AttemptRecord(attempt=attempt_number, patch_error=f"red team agent crashed: {exc}")
             attempts.append(record)
             _write_attempt_artifacts(attempt_dir, record=record, scenario=None)
             _append_attempt(attempts_path, record)
             continue
-        _write_text(attempt_dir, "attacker_patch.raw.txt", patch_text)
+        _write_text(attempt_dir, "red_team_patch.raw.txt", patch_text)
         try:
             patch = parse_attack_patch(patch_text)
         except ValueError as exc:
             try:
                 repair_text = _with_agent_crash_retries(
-                    lambda: attacker.propose_patch(
+                    lambda: red_team.propose_patch(
                         active_scenario,
                         attempt_number,
                         attempts,
@@ -67,9 +67,9 @@ def run_benchmark(
                     )
                 )
             except RuntimeError as crash_exc:
-                patch_error = f"attacker repair crashed: {crash_exc}"
+                patch_error = f"red team agent repair crashed: {crash_exc}"
                 repair_text = ""
-            _write_text(attempt_dir, "attacker_repair_patch.raw.txt", repair_text)
+            _write_text(attempt_dir, "red_team_repair_patch.raw.txt", repair_text)
             if repair_text:
                 try:
                     patch = parse_attack_patch(repair_text)
@@ -231,7 +231,7 @@ def apply_overrides(scenario: AttackScenario, overrides: dict[str, Any]) -> Atta
     if not overrides:
         return scenario
     data = scenario.model_dump(mode="json")
-    _override_agent(data["agents"]["attacker"], overrides, "attacker")
+    _override_agent(data["agents"]["red_team"], overrides, "red_team")
     _override_agent(data["agents"]["victim"], overrides, "victim")
     return AttackScenario.model_validate(data)
 
@@ -239,6 +239,9 @@ def apply_overrides(scenario: AttackScenario, overrides: dict[str, Any]) -> Atta
 def _override_agent(agent_data: dict[str, Any], overrides: dict[str, Any], role: str) -> None:
     provider = overrides.get(f"{role}_provider")
     model = overrides.get(f"{role}_model")
+    if role == "red_team":
+        provider = provider or overrides.get("attacker_provider")
+        model = model or overrides.get("attacker_model")
     if provider:
         agent_data["provider"] = provider
     if model:
@@ -246,7 +249,7 @@ def _override_agent(agent_data: dict[str, Any], overrides: dict[str, Any], role:
 
 
 def validate_supported_runtime(scenario: AttackScenario) -> None:
-    for role, agent in (("attacker", scenario.agents.attacker), ("victim", scenario.agents.victim)):
+    for role, agent in (("red_team", scenario.agents.red_team), ("victim", scenario.agents.victim)):
         _validate_agent_runtime(role, agent)
 
 

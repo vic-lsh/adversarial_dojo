@@ -21,7 +21,11 @@ class AgentConfig(StrictModel):
 
 
 class ScenarioAgents(StrictModel):
-    attacker: AgentConfig = Field(default_factory=AgentConfig)
+    red_team: AgentConfig = Field(
+        default_factory=AgentConfig,
+        validation_alias=AliasChoices("red_team", "attacker"),
+        serialization_alias="red_team",
+    )
     victim: AgentConfig = Field(default_factory=AgentConfig)
     analyzer: AgentConfig | None = None
 
@@ -35,16 +39,32 @@ class BenchmarkConstraints(StrictModel):
 class ExperimentBenchmark(StrictModel):
     max_attempts: int = Field(default=10, ge=1)
     victim_profile: str = "A helpful agent with access to mocked MCP tools."
-    attacker_guidance: str = ""
-    attacker_guidance_file: str | None = None
+    red_team_guidance: str = Field(
+        default="",
+        validation_alias=AliasChoices("red_team_guidance", "attacker_guidance"),
+        serialization_alias="red_team_guidance",
+    )
+    red_team_guidance_file: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("red_team_guidance_file", "attacker_guidance_file"),
+        serialization_alias="red_team_guidance_file",
+    )
     constraints: BenchmarkConstraints = Field(default_factory=BenchmarkConstraints)
 
 
 class ScenarioSeed(StrictModel):
     user_task: str = Field(min_length=1)
-    attacker_task: str = Field(min_length=1)
+    red_team_task: str = Field(
+        min_length=1,
+        validation_alias=AliasChoices("red_team_task", "attacker_task"),
+        serialization_alias="red_team_task",
+    )
     max_attempts: int = Field(default=3, ge=1)
-    attacker_instructions: str = ""
+    red_team_instructions: str = Field(
+        default="",
+        validation_alias=AliasChoices("red_team_instructions", "attacker_instructions"),
+        serialization_alias="red_team_instructions",
+    )
 
 
 class MockToolResponse(StrictModel):
@@ -148,13 +168,21 @@ class ExperimentConfig(StrictModel):
 
             data["tool_surface"] = load_tool_surface_file(surface_path).model_dump(mode="json")
         benchmark = data.get("benchmark")
-        if isinstance(benchmark, dict) and benchmark.get("attacker_guidance_file"):
-            guidance_path = Path(benchmark["attacker_guidance_file"]).expanduser()
+        guidance_file = None
+        if isinstance(benchmark, dict):
+            guidance_file = benchmark.get("red_team_guidance_file") or benchmark.get("attacker_guidance_file")
+        if guidance_file:
+            guidance_path = Path(guidance_file).expanduser()
             if not guidance_path.is_absolute():
                 guidance_path = config_path.parent / guidance_path
             guidance_text = guidance_path.read_text(encoding="utf-8")
-            existing_guidance = str(benchmark.get("attacker_guidance", "")).strip()
-            benchmark["attacker_guidance"] = _combine_guidance(existing_guidance, guidance_text)
+            existing_guidance = str(
+                benchmark.get("red_team_guidance", benchmark.get("attacker_guidance", ""))
+            ).strip()
+            benchmark["red_team_guidance"] = _combine_guidance(existing_guidance, guidance_text)
+            benchmark["red_team_guidance_file"] = str(guidance_file)
+            benchmark.pop("attacker_guidance", None)
+            benchmark.pop("attacker_guidance_file", None)
         return cls.model_validate(data)
 
 
@@ -202,7 +230,11 @@ Oracle = ToolInvokedOracle | SecretExfiltratedOracle
 
 class AttackPatch(StrictModel):
     user_task: str | None = None
-    attacker_task: str | None = None
+    red_team_task: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("red_team_task", "attacker_task"),
+        serialization_alias="red_team_task",
+    )
     environment: MockEnvironment | None = None
     oracles: list[Oracle] | None = None
     secrets: list[SecretSpec] | None = None
@@ -212,7 +244,7 @@ class AttackPatch(StrictModel):
     def validate_non_empty(self) -> AttackPatch:
         if (
             self.user_task is None
-            and self.attacker_task is None
+            and self.red_team_task is None
             and self.environment is None
             and self.oracles is None
             and self.secrets is None
@@ -259,8 +291,8 @@ class AttackScenario(StrictModel):
         data = self.model_dump(mode="json")
         if patch.user_task is not None:
             data["seed"]["user_task"] = patch.user_task
-        if patch.attacker_task is not None:
-            data["seed"]["attacker_task"] = patch.attacker_task
+        if patch.red_team_task is not None:
+            data["seed"]["red_team_task"] = patch.red_team_task
         if patch.environment is not None:
             data["environment"] = patch.environment.model_dump(mode="json")
         if patch.secrets is not None:
@@ -319,7 +351,11 @@ class AttemptAnalysis(StrictModel):
     freeform_notes: str = ""
     refusal_reason_tags: list[str] = Field(default_factory=list)
     progress_signals: list[str] = Field(default_factory=list)
-    attacker_recommendations: list[str] = Field(default_factory=list)
+    red_team_recommendations: list[str] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("red_team_recommendations", "attacker_recommendations"),
+        serialization_alias="red_team_recommendations",
+    )
     evidence: list[str] = Field(default_factory=list)
 
 
