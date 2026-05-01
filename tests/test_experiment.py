@@ -5,7 +5,7 @@ import json
 import yaml
 
 import adversarial_dojo.experiment as experiment_module
-from adversarial_dojo.agents import FakeAgentRunner
+from adversarial_dojo.agents import FakeAgentRunner, _scenario_generation_prompt
 from adversarial_dojo.experiment import run_attack_search
 from adversarial_dojo.models import ExperimentConfig
 from adversarial_dojo.tool_surfaces import load_tool_surface_file
@@ -100,6 +100,35 @@ provider = "fake"
     assert config.tool_surface.mcp_servers[0].tools[0].args_schema["required"] == ["doc_id"]
 
 
+def test_experiment_config_loads_attacker_guidance_from_relative_file(tmp_path) -> None:
+    notes_path = tmp_path / "notes.txt"
+    notes_path.write_text("Prefer subtle handoff workflows.", encoding="utf-8")
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        """
+id = "guided-search"
+
+[agents.attacker]
+provider = "fake"
+
+[agents.victim]
+provider = "fake"
+
+[benchmark]
+attacker_guidance = "Avoid obvious system notices."
+attacker_guidance_file = "notes.txt"
+""",
+        encoding="utf-8",
+    )
+
+    config = ExperimentConfig.from_toml_file(config_path)
+
+    assert config.benchmark.attacker_guidance_file == "notes.txt"
+    assert config.benchmark.attacker_guidance == (
+        "Avoid obvious system notices.\n\nPrefer subtle handoff workflows."
+    )
+
+
 def test_load_tool_surface_file_loads_json_yaml_and_toml(tmp_path) -> None:
     for suffix, content in [
         (
@@ -122,6 +151,17 @@ def test_load_tool_surface_file_loads_json_yaml_and_toml(tmp_path) -> None:
 
         assert surface.mcp_servers[0].name == "drive"
         assert surface.mcp_servers[0].tools[0].name == "read_doc"
+
+
+def test_scenario_generation_prompt_includes_human_guidance() -> None:
+    data = valid_config_data()
+    data["benchmark"]["attacker_guidance"] = "The human reviewer says to pivot away from HTML comments."
+    config = ExperimentConfig.model_validate(data)
+
+    prompt = _scenario_generation_prompt(config, attempt=3, previous_attempts=[object()])
+
+    assert "Human reviewer guidance for this search" in prompt
+    assert "pivot away from HTML comments" in prompt
 
 
 def test_experiment_config_loads_tool_surface_from_proto_file(tmp_path) -> None:

@@ -34,6 +34,8 @@ class BenchmarkConstraints(StrictModel):
 class ExperimentBenchmark(StrictModel):
     max_attempts: int = Field(default=10, ge=1)
     victim_profile: str = "A helpful agent with access to mocked MCP tools."
+    attacker_guidance: str = ""
+    attacker_guidance_file: str | None = None
     constraints: BenchmarkConstraints = Field(default_factory=BenchmarkConstraints)
 
 
@@ -144,7 +146,20 @@ class ExperimentConfig(StrictModel):
             from adversarial_dojo.tool_surfaces import load_tool_surface_file
 
             data["tool_surface"] = load_tool_surface_file(surface_path).model_dump(mode="json")
+        benchmark = data.get("benchmark")
+        if isinstance(benchmark, dict) and benchmark.get("attacker_guidance_file"):
+            guidance_path = Path(benchmark["attacker_guidance_file"]).expanduser()
+            if not guidance_path.is_absolute():
+                guidance_path = config_path.parent / guidance_path
+            guidance_text = guidance_path.read_text(encoding="utf-8")
+            existing_guidance = str(benchmark.get("attacker_guidance", "")).strip()
+            benchmark["attacker_guidance"] = _combine_guidance(existing_guidance, guidance_text)
         return cls.model_validate(data)
+
+
+def _combine_guidance(*parts: str) -> str:
+    cleaned = [part.strip() for part in parts if part and part.strip()]
+    return "\n\n".join(cleaned)
 
 
 class ToolInvokedOracle(StrictModel):

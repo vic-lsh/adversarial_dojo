@@ -37,6 +37,8 @@ def main(argv: list[str] | None = None) -> int:
     attack_parser.add_argument("--attacker-model", default=None)
     attack_parser.add_argument("--victim-provider", default=None)
     attack_parser.add_argument("--victim-model", default=None)
+    attack_parser.add_argument("--attacker-guidance", default=None)
+    attack_parser.add_argument("--attacker-guidance-file", default=None)
     attack_parser.add_argument("--resume", action="store_true", help="Resume an existing attack run directory.")
 
     args = parser.parse_args(argv)
@@ -57,7 +59,11 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValidationError, ValueError) as exc:
             print(f"invalid config: {exc}", file=sys.stderr)
             return 2
-        overrides = _agent_overrides(args)
+        try:
+            overrides = _attack_overrides(args)
+        except OSError as exc:
+            print(f"invalid config: {exc}", file=sys.stderr)
+            return 2
         try:
             validate_supported_config(apply_config_overrides(config, overrides))
         except ValueError as exc:
@@ -107,6 +113,18 @@ def _agent_overrides(args: argparse.Namespace) -> dict[str, str | None]:
         "victim_provider": args.victim_provider,
         "victim_model": args.victim_model,
     }
+
+
+def _attack_overrides(args: argparse.Namespace) -> dict[str, str | None]:
+    overrides = _agent_overrides(args)
+    guidance_parts: list[str] = []
+    if args.attacker_guidance:
+        guidance_parts.append(args.attacker_guidance)
+    if args.attacker_guidance_file:
+        guidance_parts.append(Path(args.attacker_guidance_file).read_text(encoding="utf-8"))
+    if guidance_parts:
+        overrides["attacker_guidance"] = "\n\n".join(part.strip() for part in guidance_parts if part.strip())
+    return overrides
 
 
 if __name__ == "__main__":

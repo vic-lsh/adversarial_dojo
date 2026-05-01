@@ -187,6 +187,9 @@ def apply_config_overrides(config: ExperimentConfig, overrides: dict[str, Any]) 
     data = config.model_dump(mode="json")
     _override_agent(data["agents"]["attacker"], overrides, "attacker")
     _override_agent(data["agents"]["victim"], overrides, "victim")
+    attacker_guidance = overrides.get("attacker_guidance")
+    if attacker_guidance is not None:
+        data["benchmark"]["attacker_guidance"] = attacker_guidance
     return ExperimentConfig.model_validate(data)
 
 
