@@ -201,10 +201,24 @@ class SecretSpec(StrictModel):
     id: str = Field(min_length=1, pattern=r"^[A-Za-z0-9_-]+$")
     description: str = ""
     placeholder: str | None = None
+    resource_id: str | None = None
 
     @property
     def token(self) -> str:
         return self.placeholder or f"{{{{secret.{self.id}}}}}"
+
+
+class ResourceSpec(StrictModel):
+    id: str = Field(min_length=1)
+    description: str = ""
+    red_team_access: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("red_team_access", "attacker_access"),
+        serialization_alias="red_team_access",
+    )
+    victim_access: bool = True
+    source_refs: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class ExfiltrationSink(StrictModel):
@@ -237,6 +251,7 @@ class AttackPatch(StrictModel):
     )
     environment: MockEnvironment | None = None
     oracles: list[Oracle] | None = None
+    resources: list[ResourceSpec] | None = None
     secrets: list[SecretSpec] | None = None
     exfiltration_sinks: list[ExfiltrationSink] | None = None
 
@@ -247,6 +262,7 @@ class AttackPatch(StrictModel):
             and self.red_team_task is None
             and self.environment is None
             and self.oracles is None
+            and self.resources is None
             and self.secrets is None
             and self.exfiltration_sinks is None
         ):
@@ -259,6 +275,7 @@ class AttackScenario(StrictModel):
     agents: ScenarioAgents = Field(default_factory=ScenarioAgents)
     seed: ScenarioSeed
     environment: MockEnvironment = Field(default_factory=MockEnvironment)
+    resources: list[ResourceSpec] = Field(default_factory=list)
     secrets: list[SecretSpec] = Field(default_factory=list)
     exfiltration_sinks: list[ExfiltrationSink] = Field(default_factory=list)
     oracles: list[Oracle] = Field(min_length=1)
@@ -274,6 +291,13 @@ class AttackScenario(StrictModel):
     def validate_secret_exfiltration_references(self) -> AttackScenario:
         secret_ids = {secret.id for secret in self.secrets}
         sink_ids = {sink.id for sink in self.exfiltration_sinks}
+        resource_ids = [resource.id for resource in self.resources]
+        duplicate_resource_ids = sorted(
+            {resource_id for resource_id in resource_ids if resource_ids.count(resource_id) > 1}
+        )
+        if duplicate_resource_ids:
+            raise ValueError(f"duplicate resource ids: {', '.join(duplicate_resource_ids)}")
+        resource_id_set = set(resource_ids)
         for oracle in self.oracles:
             if isinstance(oracle, SecretExfiltratedOracle):
                 if oracle.secret_id not in secret_ids:
@@ -283,6 +307,8 @@ class AttackScenario(StrictModel):
         for sink in self.exfiltration_sinks:
             self.environment.find_tool(sink.server, sink.tool)
         for secret in self.secrets:
+            if secret.resource_id is not None and secret.resource_id not in resource_id_set:
+                raise ValueError(f"secret {secret.id} references unknown resource: {secret.resource_id}")
             if _is_unrendered_secret(secret) and not _environment_contains_text(self.environment, secret.token):
                 raise ValueError(f"secret placeholder {secret.token} must appear in at least one mocked tool response")
         return self
@@ -295,6 +321,8 @@ class AttackScenario(StrictModel):
             data["seed"]["red_team_task"] = patch.red_team_task
         if patch.environment is not None:
             data["environment"] = patch.environment.model_dump(mode="json")
+        if patch.resources is not None:
+            data["resources"] = [resource.model_dump(mode="json") for resource in patch.resources]
         if patch.secrets is not None:
             data["secrets"] = [secret.model_dump(mode="json") for secret in patch.secrets]
         if patch.exfiltration_sinks is not None:

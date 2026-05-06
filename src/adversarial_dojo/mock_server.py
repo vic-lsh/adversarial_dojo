@@ -14,17 +14,19 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--server", required=True)
     parser.add_argument("--calls", required=True)
+    parser.add_argument("--state", required=False, default=None)
     args = parser.parse_args()
-    anyio.run(run_server, args.server, args.calls)
+    anyio.run(run_server, args.server, args.calls, args.state)
 
 
-async def run_server(server_path: str, calls_path: str) -> None:
+async def run_server(server_path: str, calls_path: str, state_path: str | None = None) -> None:
     with open(server_path, "r", encoding="utf-8") as handle:
         mock_server = MockMcpServer.model_validate_json(handle.read())
     mcp_server = Server(mock_server.name)
     executor = MockToolExecutor(
         server_to_environment(mock_server),
         recorder=ToolInvocationRecorder(calls_path),
+        state_path=state_path,
     )
 
     @mcp_server.list_tools()

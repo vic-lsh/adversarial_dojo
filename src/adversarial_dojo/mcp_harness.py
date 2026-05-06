@@ -16,6 +16,7 @@ class MockMcpHarness:
         self._tmp: tempfile.TemporaryDirectory[str] | None = None
         self._root: Path | None = None
         self._call_logs: list[Path] = []
+        self._state_path: Path | None = None
         self.mcp_servers = []
 
     def __enter__(self) -> MockMcpHarness:
@@ -29,6 +30,7 @@ class MockMcpHarness:
             self._tmp = tempfile.TemporaryDirectory(prefix="adversarial-dojo-mcp-")
             root = Path(self._tmp.name)
         self._root = root
+        self._state_path = root / "shared_state.json"
         for server in self.environment.mcp_servers:
             spec_path = root / f"{server.name}.json"
             call_log = root / f"{server.name}.calls.jsonl"
@@ -45,6 +47,8 @@ class MockMcpHarness:
                         str(spec_path),
                         "--calls",
                         str(call_log),
+                        "--state",
+                        str(self._state_path),
                     ],
                 )
             )
