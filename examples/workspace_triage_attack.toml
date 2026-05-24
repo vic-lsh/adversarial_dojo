@@ -9,6 +9,14 @@ reasoning_effort = "xhigh"
 provider = "claude"
 model = "haiku"
 
+# The analyzer agent runs once per attempt to label the outcome. If omitted, it
+# silently inherits [agents.attacker] (including reasoning_effort = "xhigh"),
+# which roughly doubles cost. Configure a cheap model here unless you really
+# want the attacker model doing the post-hoc analysis too.
+[agents.analyzer]
+provider = "claude"
+model = "claude-haiku-4-5"
+
 [benchmark]
 max_attempts = 3
 victim_profile = """

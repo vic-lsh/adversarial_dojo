@@ -335,6 +335,54 @@ def test_attack_search_defaults_analyzer_to_attacker_config(monkeypatch, tmp_pat
     assert analyzer_rows[0][1:] == ("fake", "attacker-model")
 
 
+def test_attack_search_warns_when_analyzer_inherits_red_team(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.setattr(
+        experiment_module,
+        "make_runner",
+        lambda role, config: FakeAgentRunner(role=role, config=config),
+    )
+    data = valid_config_data()
+    data["agents"]["red_team"] = {"provider": "fake", "model": "red-team-model"}
+    config = ExperimentConfig.model_validate(data)
+
+    run_attack_search(config, output_dir=tmp_path)
+
+    err = capsys.readouterr().err
+    assert "analyzer agent not configured" in err
+    assert "red-team-model" in err
+
+
+def test_attack_search_does_not_warn_when_analyzer_configured(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.setattr(
+        experiment_module,
+        "make_runner",
+        lambda role, config: FakeAgentRunner(role=role, config=config),
+    )
+    data = valid_config_data()
+    data["agents"]["analyzer"] = {"provider": "fake", "model": "analyzer-model"}
+    config = ExperimentConfig.model_validate(data)
+
+    run_attack_search(config, output_dir=tmp_path)
+
+    err = capsys.readouterr().err
+    assert "analyzer agent not configured" not in err
+
+
+def test_apply_config_overrides_supports_analyzer_overrides() -> None:
+    data = valid_config_data()
+    data["agents"]["red_team"] = {"provider": "fake", "model": "red-team-model"}
+    config = ExperimentConfig.model_validate(data)
+
+    overridden = experiment_module.apply_config_overrides(
+        config,
+        {"analyzer_provider": "fake", "analyzer_model": "haiku-override"},
+    )
+
+    assert overridden.agents.analyzer is not None
+    assert overridden.agents.analyzer.provider == "fake"
+    assert overridden.agents.analyzer.model == "haiku-override"
+
+
 def test_attack_search_retries_transient_attacker_crashes(monkeypatch, tmp_path) -> None:
     class FlakyAttacker(FakeAgentRunner):
         crashes = 0
