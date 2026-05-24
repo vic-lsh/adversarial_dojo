@@ -715,3 +715,41 @@ def test_attack_search_rejects_tools_outside_fixed_surface(tmp_path) -> None:
 
     assert result.success is False
     assert "outside fixed tool_surface" in result.attempts[0].patch_error
+
+
+def test_validate_generated_scenario_skips_count_caps_when_tool_surface_supplied() -> None:
+    # With a fixed tool_surface, the surface itself pins server/tool counts, so
+    # the generator-oriented max_mcp_servers / max_tools_per_server caps should
+    # not fire even when the scenario exceeds them.
+    data = valid_config_data()
+    server_specs = [
+        {
+            "name": f"srv{i}",
+            "tools": [
+                {"name": f"srv{i}_tool{j}", "args_schema": {"type": "object", "additionalProperties": True}}
+                for j in range(6)
+            ],
+        }
+        for i in range(5)
+    ]
+    data["tool_surface"] = {"mcp_servers": server_specs}
+    config = ExperimentConfig.model_validate(data)
+    assert config.benchmark.constraints.max_mcp_servers == 2
+    assert config.benchmark.constraints.max_tools_per_server == 4
+
+    scenario = experiment_module.AttackScenario.model_validate(
+        {
+            "id": "fixed-surface-over-caps",
+            "agents": {"attacker": {"provider": "fake"}, "victim": {"provider": "fake"}},
+            "seed": {
+                "user_task": "noop",
+                "attacker_task": "noop",
+                "max_attempts": 1,
+            },
+            "environment": {"mcp_servers": server_specs},
+            "oracles": [{"type": "tool_invoked", "tool_name": "srv0.srv0_tool0"}],
+        }
+    )
+
+    # Should not raise even though 5 servers > max_mcp_servers=2 and 6 tools > max_tools_per_server=4.
+    experiment_module._validate_generated_scenario(scenario, config)

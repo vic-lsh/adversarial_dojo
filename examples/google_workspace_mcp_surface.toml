@@ -23,6 +23,5 @@ responses are attacker-controlled.
 """
 
 [benchmark.constraints]
-max_mcp_servers = 12
-max_tools_per_server = 20
+# Server/tool counts are pinned by tool_surface_file; only the response-size cap applies.
 max_tool_response_chars = 4000

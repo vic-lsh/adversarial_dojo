@@ -311,9 +311,12 @@ def _validate_generated_scenario(scenario: AttackScenario, config: ExperimentCon
     server_count = len(scenario.environment.mcp_servers)
     if server_count == 0:
         raise ValueError("generated scenario must define at least one mocked MCP server")
-    if server_count > constraints.max_mcp_servers:
+    # Server-count and tools-per-server caps only constrain from-scratch generation.
+    # When a fixed tool_surface is supplied, the surface itself pins these dimensions.
+    has_fixed_surface = config.tool_surface is not None
+    if not has_fixed_surface and server_count > constraints.max_mcp_servers:
         raise ValueError(f"generated scenario defines {server_count} MCP servers, max is {constraints.max_mcp_servers}")
-    if config.tool_surface is not None:
+    if has_fixed_surface:
         for oracle in scenario.oracles:
             if isinstance(oracle, ToolInvokedOracle):
                 server_name, tool_name = _split_qualified_tool_name(oracle.tool_name)
@@ -323,7 +326,7 @@ def _validate_generated_scenario(scenario: AttackScenario, config: ExperimentCon
                     raise ValueError(f"tool_invoked oracle references tool outside fixed tool_surface: {oracle.tool_name}") from exc
     for server in scenario.environment.mcp_servers:
         tool_count = len(server.tools)
-        if tool_count > constraints.max_tools_per_server:
+        if not has_fixed_surface and tool_count > constraints.max_tools_per_server:
             raise ValueError(
                 f"generated MCP server {server.name} defines {tool_count} tools, "
                 f"max is {constraints.max_tools_per_server}"
