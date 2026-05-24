@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from adversarial_dojo.agents import AgentshimRunner, _make_coding_agent, _recover_yaml_from_stream, _scenario_generation_prompt
-from adversarial_dojo.attacker_submission import (
+from adversarial_dojo.red_team_submission import (
     SUBMISSION_SERVER_NAME,
     SUBMIT_ANALYSIS_TOOL,
     SUBMIT_PATCH_TOOL,
@@ -88,7 +88,7 @@ def test_agentshim_attacker_adapter_asks_again_when_submission_tool_is_missing(m
                         "id": "submitted",
                         "seed": {
                             "user_task": "Do work.",
-                            "attacker_task": "Trigger sink.",
+                            "red_team_task": "Trigger sink.",
                             "max_attempts": 1,
                         },
                         "environment": {
@@ -116,7 +116,7 @@ def test_agentshim_attacker_adapter_asks_again_when_submission_tool_is_missing(m
     experiment = ExperimentConfig.model_validate(
         {
             "id": "submit-test",
-            "agents": {"attacker": {"provider": "claude"}, "victim": {"provider": "fake"}},
+            "agents": {"red_team": {"provider": "claude"}, "victim": {"provider": "fake"}},
         }
     )
     runner = AgentshimRunner(role="red_team", config=config)
@@ -142,7 +142,7 @@ def test_agentshim_analyzer_adapter_uses_structured_submission(monkeypatch, tmp_
                     "summary": "Victim gathered the context and refused at the sink.",
                     "refusal_reason_tags": ["external_sharing"],
                     "progress_signals": ["read_sensitive_doc"],
-                    "attacker_recommendations": ["Keep the next sink internal longer."],
+                    "red_team_recommendations": ["Keep the next sink internal longer."],
                     "evidence": ["victim_output.txt mentions confidentiality"],
                 },
             )
@@ -156,7 +156,7 @@ def test_agentshim_analyzer_adapter_uses_structured_submission(monkeypatch, tmp_
     experiment = ExperimentConfig.model_validate(
         {
             "id": "analysis-test",
-            "agents": {"attacker": {"provider": "claude"}, "victim": {"provider": "fake"}},
+            "agents": {"red_team": {"provider": "claude"}, "victim": {"provider": "fake"}},
         }
     )
     scenario = AttackScenario.model_validate(valid_scenario_data())
@@ -278,7 +278,7 @@ def test_recover_yaml_from_stream_handles_codex_suffix(tmp_path) -> None:
         encoding="utf-8",
     )
 
-    assert _recover_yaml_from_stream(tmp_path, "attacker") == "id: recovered\nseed:\n  user_task: hi"
+    assert _recover_yaml_from_stream(tmp_path, "red_team") == "id: recovered\nseed:\n  user_task: hi"
 
 
 def test_recover_yaml_from_events_handles_tool_result_stdout(tmp_path) -> None:
@@ -287,14 +287,14 @@ def test_recover_yaml_from_events_handles_tool_result_stdout(tmp_path) -> None:
         encoding="utf-8",
     )
 
-    assert _recover_yaml_from_stream(tmp_path, "attacker") == "id: recovered\nseed:\n  user_task: hi"
+    assert _recover_yaml_from_stream(tmp_path, "red_team") == "id: recovered\nseed:\n  user_task: hi"
 
 
 def test_scenario_generation_prompt_references_previous_attempt_paths(tmp_path) -> None:
     config = ExperimentConfig.model_validate(
         {
             "id": "prompt-history",
-            "agents": {"attacker": {"provider": "fake"}, "victim": {"provider": "fake"}},
+            "agents": {"red_team": {"provider": "fake"}, "victim": {"provider": "fake"}},
         }
     )
     previous = [

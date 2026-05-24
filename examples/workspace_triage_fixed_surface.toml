@@ -1,6 +1,6 @@
 id = "workspace-triage-fixed-surface"
 
-[agents.attacker]
+[agents.red_team]
 provider = "codex"
 model = "gpt-5.5"
 reasoning_effort = "xhigh"
