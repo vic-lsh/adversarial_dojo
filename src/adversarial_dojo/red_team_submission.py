@@ -24,7 +24,7 @@ SUBMIT_ANALYSIS_TOOL = "submit_attempt_analysis"
 SubmissionKind = Literal["scenario", "patch", "analysis"]
 
 
-class AttackerSubmissionHarness:
+class RedTeamSubmissionHarness:
     def __init__(self, kind: SubmissionKind, output_dir: Path | None, attempt: int) -> None:
         self.kind = kind
         self.output_dir = output_dir
@@ -32,7 +32,7 @@ class AttackerSubmissionHarness:
         self._harness = MockMcpHarness(_submission_environment(kind), output_dir=output_dir, attempt=attempt)
         self.mcp_servers = []
 
-    def __enter__(self) -> AttackerSubmissionHarness:
+    def __enter__(self) -> RedTeamSubmissionHarness:
         self._harness.__enter__()
         self.mcp_servers = self._harness.mcp_servers
         return self

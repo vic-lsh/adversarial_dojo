@@ -1,6 +1,6 @@
 id = "fake-open-search"
 
-[agents.attacker]
+[agents.red_team]
 provider = "fake"
 
 [agents.victim]
