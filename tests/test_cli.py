@@ -21,7 +21,7 @@ def test_cli_validate_accepts_valid_yaml(tmp_path, capsys) -> None:
 
 def test_cli_run_writes_attempts_and_summary(tmp_path) -> None:
     data = valid_scenario_data()
-    data["agents"]["attacker"]["backend_kwargs"] = {
+    data["agents"]["red_team"]["backend_kwargs"] = {
         "responses": [
             {
                 "user_task": (
@@ -55,7 +55,7 @@ def test_cli_validate_config_accepts_valid_toml(tmp_path, capsys) -> None:
         """
 id = "open-search"
 
-[agents.attacker]
+[agents.red_team]
 provider = "fake"
 
 [agents.victim]
@@ -81,7 +81,7 @@ def test_cli_attack_runs_toml_config(tmp_path) -> None:
         """
 id = "open-search"
 
-[agents.attacker]
+[agents.red_team]
 provider = "fake"
 
 [agents.victim]
@@ -111,7 +111,7 @@ def test_cli_attack_applies_attacker_guidance_overrides(tmp_path) -> None:
         """
 id = "open-search"
 
-[agents.attacker]
+[agents.red_team]
 provider = "fake"
 
 [agents.victim]
@@ -120,7 +120,7 @@ provider = "fake"
 [benchmark]
 max_attempts = 1
 victim_profile = "A helpful agent with mocked MCP tools."
-attacker_guidance = "Avoid explicit automation banners."
+red_team_guidance = "Avoid explicit automation banners."
 """,
         encoding="utf-8",
     )

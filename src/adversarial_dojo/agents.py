@@ -13,8 +13,8 @@ from typing import Any, Protocol
 import yaml
 from jinja2 import BaseLoader, Environment, StrictUndefined, TemplateNotFound
 
-from adversarial_dojo.attacker_submission import (
-    AttackerSubmissionHarness,
+from adversarial_dojo.red_team_submission import (
+    RedTeamSubmissionHarness,
     SubmissionKind,
     submission_to_text,
     submission_tool_name,
@@ -288,7 +288,7 @@ class AgentshimRunner:
             output_dir=output_dir,
         )
         event_recorder = AgentTrajectoryRecorder("red_team", output_dir)
-        return _generate_attacker_submission(
+        return _generate_red_team_submission(
             CodingAgent,
             self.config,
             prompt=prompt,
@@ -344,7 +344,7 @@ class AgentshimRunner:
         )
         event_recorder = AgentTrajectoryRecorder("red_team", output_dir)
         try:
-            return _generate_attacker_submission(
+            return _generate_red_team_submission(
                 CodingAgent,
                 self.config,
                 prompt=prompt,
@@ -378,7 +378,7 @@ class AgentshimRunner:
             attempt_dir=attempt_dir,
         )
         event_recorder = AgentTrajectoryRecorder("analyzer", output_dir)
-        raw = _generate_attacker_submission(
+        raw = _generate_red_team_submission(
             CodingAgent,
             self.config,
             prompt=prompt,
@@ -410,7 +410,7 @@ def _make_coding_agent(coding_agent_cls, config: AgentConfig, **kwargs):
     return agent
 
 
-def _generate_attacker_submission(
+def _generate_red_team_submission(
     coding_agent_cls,
     config: AgentConfig,
     *,
@@ -420,7 +420,7 @@ def _generate_attacker_submission(
     output_dir: Path | None,
     event_recorder: AgentTrajectoryRecorder,
 ) -> str:
-    with AttackerSubmissionHarness(kind, output_dir=output_dir, attempt=attempt) as harness:
+    with RedTeamSubmissionHarness(kind, output_dir=output_dir, attempt=attempt) as harness:
         agent = _make_coding_agent(
             coding_agent_cls,
             config,
@@ -514,30 +514,24 @@ def _victim_sandbox_config(victim_cwd: Path):
 def _recover_yaml_from_stream(output_dir: Path | None, role: str) -> str | None:
     if output_dir is None:
         return None
-    roles = [role]
-    if role == "red_team":
-        roles.append("attacker")
-    elif role == "attacker":
-        roles.append("red_team")
-    for candidate_role in roles:
-        stream_path = output_dir / f"{candidate_role}_stream.txt"
-        if stream_path.exists():
-            recovered = _extract_yaml_candidate(stream_path.read_text(encoding="utf-8"))
-            if recovered is not None:
-                return recovered
-        events_path = output_dir / f"{candidate_role}_events.jsonl"
-        if events_path.exists():
-            for line in reversed(events_path.read_text(encoding="utf-8").splitlines()):
-                try:
-                    event = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                for key in ("text", "stdout"):
-                    value = event.get(key)
-                    if isinstance(value, str):
-                        recovered = _extract_yaml_candidate(value)
-                        if recovered is not None:
-                            return recovered
+    stream_path = output_dir / f"{role}_stream.txt"
+    if stream_path.exists():
+        recovered = _extract_yaml_candidate(stream_path.read_text(encoding="utf-8"))
+        if recovered is not None:
+            return recovered
+    events_path = output_dir / f"{role}_events.jsonl"
+    if events_path.exists():
+        for line in reversed(events_path.read_text(encoding="utf-8").splitlines()):
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            for key in ("text", "stdout"):
+                value = event.get(key)
+                if isinstance(value, str):
+                    recovered = _extract_yaml_candidate(value)
+                    if recovered is not None:
+                        return recovered
     return None
 
 

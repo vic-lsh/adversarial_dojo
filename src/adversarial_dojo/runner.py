@@ -240,6 +240,7 @@ def _override_agent(agent_data: dict[str, Any], overrides: dict[str, Any], role:
     provider = overrides.get(f"{role}_provider")
     model = overrides.get(f"{role}_model")
     if role == "red_team":
+        # Back-compat: accept legacy attacker_* override keys for one release.
         provider = provider or overrides.get("attacker_provider")
         model = model or overrides.get("attacker_model")
     if provider:
