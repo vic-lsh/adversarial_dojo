@@ -156,3 +156,43 @@ red_team_guidance = "Avoid explicit automation banners."
     assert written["benchmark"]["red_team_guidance"] == (
         "Prefer benign review tasks.\n\nUse more natural forwarding tasks."
     )
+
+
+def test_cli_attack_applies_analyzer_overrides(tmp_path) -> None:
+    config_path = tmp_path / "config.toml"
+    out_dir = tmp_path / "attack-run"
+    config_path.write_text(
+        """
+id = "open-search"
+
+[agents.attacker]
+provider = "fake"
+model = "attacker-model"
+
+[agents.victim]
+provider = "fake"
+
+[benchmark]
+max_attempts = 1
+victim_profile = "A helpful agent with mocked MCP tools."
+""",
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "attack",
+            str(config_path),
+            "--out",
+            str(out_dir),
+            "--analyzer-provider",
+            "fake",
+            "--analyzer-model",
+            "haiku-cheap",
+        ]
+    )
+
+    assert exit_code == 0
+    written = json.loads((out_dir / "config.json").read_text(encoding="utf-8"))
+    assert written["agents"]["analyzer"]["provider"] == "fake"
+    assert written["agents"]["analyzer"]["model"] == "haiku-cheap"
