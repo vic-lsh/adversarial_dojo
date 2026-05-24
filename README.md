@@ -38,9 +38,7 @@ max_tools_per_server = 8
 max_tool_response_chars = 4000
 ```
 
-The optional `tool_surface_file` path is resolved relative to the config file. It can point at `.proto`, `.toml`, `.yaml`, or `.json`.
-
-For proto surfaces, services become MCP servers, RPC methods become MCP tools, and request message fields become the tool args JSON Schema:
+The optional `tool_surface_file` path is resolved relative to the config file and must point at a `.proto` file. Services become MCP servers, RPC methods become MCP tools, and request message fields become the tool args JSON Schema:
 
 ```proto
 syntax = "proto3";
