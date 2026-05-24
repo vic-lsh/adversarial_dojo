@@ -13,7 +13,7 @@ def test_cli_validate_accepts_valid_yaml(tmp_path, capsys) -> None:
     scenario_path = tmp_path / "scenario.yaml"
     scenario_path.write_text(yaml.safe_dump(valid_scenario_data()), encoding="utf-8")
 
-    exit_code = main(["validate", str(scenario_path)])
+    exit_code = main(["validate-scenario", str(scenario_path)])
 
     assert exit_code == 0
     assert "valid scenario" in capsys.readouterr().out
@@ -38,7 +38,7 @@ def test_cli_run_writes_attempts_and_summary(tmp_path) -> None:
     out_dir = tmp_path / "run"
     scenario_path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
-    exit_code = main(["run", str(scenario_path), "--out", str(out_dir)])
+    exit_code = main(["replay", str(scenario_path), "--out", str(out_dir)])
 
     assert exit_code == 0
     attempts = (out_dir / "attempts.jsonl").read_text(encoding="utf-8").strip().splitlines()
@@ -47,6 +47,19 @@ def test_cli_run_writes_attempts_and_summary(tmp_path) -> None:
     assert (out_dir / "attempt-001" / "victim_output.txt").exists()
     summary = json.loads((out_dir / "summary.json").read_text(encoding="utf-8"))
     assert summary["success"] is True
+
+
+def test_cli_validate_legacy_alias_still_works(tmp_path, capsys) -> None:
+    scenario_path = tmp_path / "scenario.yaml"
+    scenario_path.write_text(yaml.safe_dump(valid_scenario_data()), encoding="utf-8")
+
+    exit_code = main(["validate", str(scenario_path)])
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "valid scenario" in captured.out
+    assert "deprecated" in captured.err
+    assert "validate-scenario" in captured.err
 
 
 def test_cli_validate_config_accepts_valid_toml(tmp_path, capsys) -> None:

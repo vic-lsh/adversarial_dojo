@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import warnings
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -12,17 +13,31 @@ from adversarial_dojo.models import AttackScenario, ExperimentConfig
 from adversarial_dojo.runner import apply_overrides, run_benchmark, validate_supported_runtime
 
 
+_DEPRECATED_ALIASES = {
+    "validate": "validate-scenario",
+    "run": "replay",
+}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="adversarial-dojo")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    validate_parser = subparsers.add_parser("validate", help="Validate a YAML attack scenario.")
+    validate_parser = subparsers.add_parser(
+        "validate-scenario",
+        aliases=["validate"],
+        help="Validate a YAML attack scenario.",
+    )
     validate_parser.add_argument("scenario")
 
     validate_config_parser = subparsers.add_parser("validate-config", help="Validate a TOML experiment config.")
     validate_config_parser.add_argument("config")
 
-    run_parser = subparsers.add_parser("run", help="Run a YAML attack scenario.")
+    run_parser = subparsers.add_parser(
+        "replay",
+        aliases=["run"],
+        help="Replay a pre-baked YAML attack scenario through the victim.",
+    )
     run_parser.add_argument("scenario")
     run_parser.add_argument("--out", default=None)
     run_parser.add_argument("--attacker-provider", default=None)
@@ -42,6 +57,20 @@ def main(argv: list[str] | None = None) -> int:
     attack_parser.add_argument("--resume", action="store_true", help="Resume an existing attack run directory.")
 
     args = parser.parse_args(argv)
+
+    if args.command in _DEPRECATED_ALIASES:
+        new_name = _DEPRECATED_ALIASES[args.command]
+        warnings.warn(
+            f"`{args.command}` is deprecated and will be removed in a future release; "
+            f"use `{new_name}` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        print(
+            f"warning: `{args.command}` is deprecated; use `{new_name}` instead.",
+            file=sys.stderr,
+        )
+        args.command = new_name
 
     if args.command == "validate-config":
         try:
@@ -80,7 +109,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"invalid scenario: {exc}", file=sys.stderr)
         return 2
 
-    if args.command == "validate":
+    if args.command == "validate-scenario":
         try:
             validate_supported_runtime(scenario)
         except ValueError as exc:
