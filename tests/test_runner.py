@@ -9,7 +9,7 @@ from tests.test_models import valid_scenario_data
 
 def test_fake_attacker_evolves_until_victim_invokes_target_tool(tmp_path) -> None:
     data = valid_scenario_data()
-    data["agents"]["attacker"]["backend_kwargs"] = {
+    data["agents"]["red_team"]["backend_kwargs"] = {
         "responses": [
             {"user_task": "Summarize the inbox."},
             {
@@ -43,7 +43,7 @@ def test_fake_attacker_evolves_until_victim_invokes_target_tool(tmp_path) -> Non
 def test_invalid_patch_gets_repair_prompt_then_counts_failed_attempt() -> None:
     data = valid_scenario_data()
     data["seed"]["max_attempts"] = 1
-    data["agents"]["attacker"]["backend_kwargs"] = {"responses": ["[]", "{}"]}
+    data["agents"]["red_team"]["backend_kwargs"] = {"responses": ["[]", "{}"]}
     scenario = AttackScenario.model_validate(data)
 
     result = run_benchmark(scenario)
@@ -56,7 +56,7 @@ def test_invalid_patch_gets_repair_prompt_then_counts_failed_attempt() -> None:
 def test_invalid_attempt_artifacts_include_raw_and_repair_outputs(tmp_path) -> None:
     data = valid_scenario_data()
     data["seed"]["max_attempts"] = 1
-    data["agents"]["attacker"]["backend_kwargs"] = {"responses": ["[]", "{}"]}
+    data["agents"]["red_team"]["backend_kwargs"] = {"responses": ["[]", "{}"]}
     scenario = AttackScenario.model_validate(data)
 
     run_benchmark(scenario, output_dir=tmp_path)

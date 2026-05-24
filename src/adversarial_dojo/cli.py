@@ -40,20 +40,56 @@ def main(argv: list[str] | None = None) -> int:
     )
     run_parser.add_argument("scenario")
     run_parser.add_argument("--out", default=None)
-    run_parser.add_argument("--attacker-provider", default=None)
-    run_parser.add_argument("--attacker-model", default=None)
+    run_parser.add_argument("--red-team-provider", dest="red_team_provider", default=None)
+    run_parser.add_argument("--red-team-model", dest="red_team_model", default=None)
+    run_parser.add_argument(
+        "--attacker-provider",
+        dest="attacker_provider",
+        default=None,
+        help="Deprecated alias for --red-team-provider.",
+    )
+    run_parser.add_argument(
+        "--attacker-model",
+        dest="attacker_model",
+        default=None,
+        help="Deprecated alias for --red-team-model.",
+    )
     run_parser.add_argument("--victim-provider", default=None)
     run_parser.add_argument("--victim-model", default=None)
 
-    attack_parser = subparsers.add_parser("attack", help="Run open-ended attacker-generated scenario search.")
+    attack_parser = subparsers.add_parser("attack", help="Run open-ended red-team-generated scenario search.")
     attack_parser.add_argument("config")
     attack_parser.add_argument("--out", default=None)
-    attack_parser.add_argument("--attacker-provider", default=None)
-    attack_parser.add_argument("--attacker-model", default=None)
+    attack_parser.add_argument("--red-team-provider", dest="red_team_provider", default=None)
+    attack_parser.add_argument("--red-team-model", dest="red_team_model", default=None)
+    attack_parser.add_argument(
+        "--attacker-provider",
+        dest="attacker_provider",
+        default=None,
+        help="Deprecated alias for --red-team-provider.",
+    )
+    attack_parser.add_argument(
+        "--attacker-model",
+        dest="attacker_model",
+        default=None,
+        help="Deprecated alias for --red-team-model.",
+    )
     attack_parser.add_argument("--victim-provider", default=None)
     attack_parser.add_argument("--victim-model", default=None)
-    attack_parser.add_argument("--attacker-guidance", default=None)
-    attack_parser.add_argument("--attacker-guidance-file", default=None)
+    attack_parser.add_argument("--red-team-guidance", dest="red_team_guidance", default=None)
+    attack_parser.add_argument("--red-team-guidance-file", dest="red_team_guidance_file", default=None)
+    attack_parser.add_argument(
+        "--attacker-guidance",
+        dest="attacker_guidance",
+        default=None,
+        help="Deprecated alias for --red-team-guidance.",
+    )
+    attack_parser.add_argument(
+        "--attacker-guidance-file",
+        dest="attacker_guidance_file",
+        default=None,
+        help="Deprecated alias for --red-team-guidance-file.",
+    )
     attack_parser.add_argument("--resume", action="store_true", help="Resume an existing attack run directory.")
 
     args = parser.parse_args(argv)
@@ -136,9 +172,27 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _agent_overrides(args: argparse.Namespace) -> dict[str, str | None]:
+    red_team_provider = getattr(args, "red_team_provider", None)
+    red_team_model = getattr(args, "red_team_model", None)
+    attacker_provider = getattr(args, "attacker_provider", None)
+    attacker_model = getattr(args, "attacker_model", None)
+    if attacker_provider is not None and red_team_provider is None:
+        warnings.warn(
+            "--attacker-provider is deprecated; use --red-team-provider.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        red_team_provider = attacker_provider
+    if attacker_model is not None and red_team_model is None:
+        warnings.warn(
+            "--attacker-model is deprecated; use --red-team-model.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        red_team_model = attacker_model
     return {
-        "attacker_provider": args.attacker_provider,
-        "attacker_model": args.attacker_model,
+        "red_team_provider": red_team_provider,
+        "red_team_model": red_team_model,
         "victim_provider": args.victim_provider,
         "victim_model": args.victim_model,
     }
@@ -147,10 +201,28 @@ def _agent_overrides(args: argparse.Namespace) -> dict[str, str | None]:
 def _attack_overrides(args: argparse.Namespace) -> dict[str, str | None]:
     overrides = _agent_overrides(args)
     guidance_parts: list[str] = []
-    if args.attacker_guidance:
-        guidance_parts.append(args.attacker_guidance)
-    if args.attacker_guidance_file:
-        guidance_parts.append(Path(args.attacker_guidance_file).read_text(encoding="utf-8"))
+    red_team_guidance = getattr(args, "red_team_guidance", None)
+    red_team_guidance_file = getattr(args, "red_team_guidance_file", None)
+    attacker_guidance = getattr(args, "attacker_guidance", None)
+    attacker_guidance_file = getattr(args, "attacker_guidance_file", None)
+    if attacker_guidance is not None and red_team_guidance is None:
+        warnings.warn(
+            "--attacker-guidance is deprecated; use --red-team-guidance.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        red_team_guidance = attacker_guidance
+    if attacker_guidance_file is not None and red_team_guidance_file is None:
+        warnings.warn(
+            "--attacker-guidance-file is deprecated; use --red-team-guidance-file.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        red_team_guidance_file = attacker_guidance_file
+    if red_team_guidance:
+        guidance_parts.append(red_team_guidance)
+    if red_team_guidance_file:
+        guidance_parts.append(Path(red_team_guidance_file).read_text(encoding="utf-8"))
     if guidance_parts:
         overrides["red_team_guidance"] = "\n\n".join(part.strip() for part in guidance_parts if part.strip())
     return overrides
