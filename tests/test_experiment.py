@@ -65,15 +65,22 @@ max_tool_response_chars = 2000
 def test_experiment_config_loads_tool_surface_from_relative_file(tmp_path) -> None:
     surfaces_dir = tmp_path / "surfaces"
     surfaces_dir.mkdir()
-    (surfaces_dir / "workspace.toml").write_text(
+    (surfaces_dir / "workspace.proto").write_text(
         """
-[[mcp_servers]]
-name = "drive"
+syntax = "proto3";
+package dojo.workspace;
 
-[[mcp_servers.tools]]
-name = "read_doc"
-description = "Read a document."
-args_schema = { type = "object", properties = { doc_id = { type = "string" } }, required = ["doc_id"], additionalProperties = false }
+service Drive {
+  rpc ReadDoc(ReadDocRequest) returns (ToolTextResponse);
+}
+
+message ReadDocRequest {
+  string doc_id = 1;
+}
+
+message ToolTextResponse {
+  string result = 1;
+}
 """,
         encoding="utf-8",
     )
@@ -81,7 +88,7 @@ args_schema = { type = "object", properties = { doc_id = { type = "string" } }, 
     config_path.write_text(
         """
 id = "external-surface"
-tool_surface_file = "surfaces/workspace.toml"
+tool_surface_file = "surfaces/workspace.proto"
 
 [agents.attacker]
 provider = "fake"
@@ -94,7 +101,7 @@ provider = "fake"
 
     config = ExperimentConfig.from_toml_file(config_path)
 
-    assert config.tool_surface_file == "surfaces/workspace.toml"
+    assert config.tool_surface_file == "surfaces/workspace.proto"
     assert config.tool_surface is not None
     assert config.tool_surface.mcp_servers[0].name == "drive"
     assert config.tool_surface.mcp_servers[0].tools[0].args_schema["required"] == ["doc_id"]
@@ -129,28 +136,14 @@ attacker_guidance_file = "notes.txt"
     )
 
 
-def test_load_tool_surface_file_loads_json_yaml_and_toml(tmp_path) -> None:
-    for suffix, content in [
-        (
-            ".json",
-            '{"mcp_servers": [{"name": "drive", "tools": [{"name": "read_doc"}]}]}',
-        ),
-        (
-            ".yaml",
-            "mcp_servers:\n- name: drive\n  tools:\n  - name: read_doc\n",
-        ),
-        (
-            ".toml",
-            '[[mcp_servers]]\nname = "drive"\n[[mcp_servers.tools]]\nname = "read_doc"\n',
-        ),
-    ]:
-        surface_path = tmp_path / f"surface{suffix}"
-        surface_path.write_text(content, encoding="utf-8")
+def test_load_tool_surface_file_rejects_non_proto_extension(tmp_path) -> None:
+    import pytest
 
-        surface = load_tool_surface_file(surface_path)
+    surface_path = tmp_path / "surface.toml"
+    surface_path.write_text("", encoding="utf-8")
 
-        assert surface.mcp_servers[0].name == "drive"
-        assert surface.mcp_servers[0].tools[0].name == "read_doc"
+    with pytest.raises(ValueError, match=".proto"):
+        load_tool_surface_file(surface_path)
 
 
 def test_scenario_generation_prompt_includes_human_guidance() -> None:
@@ -259,13 +252,23 @@ provider = "fake"
 
 
 def test_experiment_config_rejects_inline_and_external_tool_surface(tmp_path) -> None:
-    surface_path = tmp_path / "surface.toml"
+    surface_path = tmp_path / "surface.proto"
     surface_path.write_text(
         """
-[[mcp_servers]]
-name = "drive"
-[[mcp_servers.tools]]
-name = "read_doc"
+syntax = "proto3";
+package dojo.workspace;
+
+service Drive {
+  rpc ReadDoc(ReadDocRequest) returns (ToolTextResponse);
+}
+
+message ReadDocRequest {
+  string doc_id = 1;
+}
+
+message ToolTextResponse {
+  string result = 1;
+}
 """,
         encoding="utf-8",
     )
@@ -273,7 +276,7 @@ name = "read_doc"
     config_path.write_text(
         """
 id = "ambiguous-surface"
-tool_surface_file = "surface.toml"
+tool_surface_file = "surface.proto"
 
 [agents.attacker]
 provider = "fake"
