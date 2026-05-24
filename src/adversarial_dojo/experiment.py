@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -55,7 +56,16 @@ def run_attack_search(
     attempts: list[AttemptRecord] = _load_attempts(attempts_path) if resume else []
     winning_attempt: int | None = next((attempt.attempt for attempt in attempts if attempt.success), None)
     start_attempt = max((attempt.attempt for attempt in attempts), default=0) + 1
-    analyzer_config = active_config.agents.analyzer or active_config.agents.red_team
+    if active_config.agents.analyzer is None:
+        analyzer_config = active_config.agents.red_team
+        print(
+            "warning: analyzer agent not configured; inheriting red_team config "
+            f"(provider={analyzer_config.provider}, model={analyzer_config.model}) "
+            "-- consider setting [agents.analyzer] to a cheaper model",
+            file=sys.stderr,
+        )
+    else:
+        analyzer_config = active_config.agents.analyzer
 
     for attempt_number in range(start_attempt, active_config.benchmark.max_attempts + 1):
         if winning_attempt is not None:
@@ -247,6 +257,16 @@ def apply_config_overrides(config: ExperimentConfig, overrides: dict[str, Any]) 
     data = config.model_dump(mode="json")
     _override_agent(data["agents"]["red_team"], overrides, "red_team")
     _override_agent(data["agents"]["victim"], overrides, "victim")
+    analyzer_provider = overrides.get("analyzer_provider")
+    analyzer_model = overrides.get("analyzer_model")
+    if analyzer_provider or analyzer_model:
+        analyzer_data = data["agents"].get("analyzer")
+        if analyzer_data is None:
+            # Seed analyzer config from red_team so a partial override (e.g. only
+            # --analyzer-model) still produces a complete AgentConfig.
+            analyzer_data = dict(data["agents"]["red_team"])
+        _override_agent(analyzer_data, overrides, "analyzer")
+        data["agents"]["analyzer"] = analyzer_data
     red_team_guidance = overrides.get("red_team_guidance", overrides.get("attacker_guidance"))
     if red_team_guidance is not None:
         data["benchmark"]["red_team_guidance"] = red_team_guidance

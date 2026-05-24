@@ -76,6 +76,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     attack_parser.add_argument("--victim-provider", default=None)
     attack_parser.add_argument("--victim-model", default=None)
+    attack_parser.add_argument("--analyzer-provider", default=None)
+    attack_parser.add_argument("--analyzer-model", default=None)
     attack_parser.add_argument("--red-team-guidance", dest="red_team_guidance", default=None)
     attack_parser.add_argument("--red-team-guidance-file", dest="red_team_guidance_file", default=None)
     attack_parser.add_argument(
@@ -200,6 +202,8 @@ def _agent_overrides(args: argparse.Namespace) -> dict[str, str | None]:
 
 def _attack_overrides(args: argparse.Namespace) -> dict[str, str | None]:
     overrides = _agent_overrides(args)
+    overrides["analyzer_provider"] = args.analyzer_provider
+    overrides["analyzer_model"] = args.analyzer_model
     guidance_parts: list[str] = []
     red_team_guidance = getattr(args, "red_team_guidance", None)
     red_team_guidance_file = getattr(args, "red_team_guidance_file", None)
