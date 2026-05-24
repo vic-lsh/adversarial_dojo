@@ -16,6 +16,7 @@ from adversarial_dojo.runner import apply_overrides, run_benchmark, validate_sup
 _DEPRECATED_ALIASES = {
     "validate": "validate-scenario",
     "run": "replay",
+    "attack": "search-attacks",
 }
 
 
@@ -57,7 +58,11 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("--victim-provider", default=None)
     run_parser.add_argument("--victim-model", default=None)
 
-    attack_parser = subparsers.add_parser("attack", help="Run open-ended red-team-generated scenario search.")
+    attack_parser = subparsers.add_parser(
+        "search-attacks",
+        aliases=["attack"],
+        help="Search for attacks: red-team agent generates scenarios and runs them against the victim.",
+    )
     attack_parser.add_argument("config")
     attack_parser.add_argument("--out", default=None)
     attack_parser.add_argument("--red-team-provider", dest="red_team_provider", default=None)
@@ -120,7 +125,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"valid config: {config.id}")
         return 0
 
-    if args.command == "attack":
+    if args.command == "search-attacks":
         try:
             config = ExperimentConfig.from_toml_file(args.config)
         except (OSError, ValidationError, ValueError) as exc:

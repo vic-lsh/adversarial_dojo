@@ -7,7 +7,7 @@ Adversarial Dojo benchmarks agents under indirect prompt injection attacks. The 
 ```bash
 uv sync
 uv run adversarial-dojo validate-config examples/fake_open_search.toml
-uv run adversarial-dojo attack examples/fake_open_search.toml --out runs/open-search
+uv run adversarial-dojo search-attacks examples/fake_open_search.toml --out runs/open-search
 uv run adversarial-dojo validate-scenario examples/fake_tool_attack.yaml
 uv run adversarial-dojo replay examples/fake_tool_attack.yaml --out runs/fake-demo
 uv run pytest
@@ -92,7 +92,7 @@ description = "Send an email."
 args_schema = { type = "object", properties = { to = { type = "string" }, body = { type = "string" } }, required = ["to", "body"], additionalProperties = false }
 ```
 
-`attack` asks the attacker agent to generate a full indirect prompt injection scenario for each attempt. `replay` runs an already generated YAML scenario through the victim.
+`search-attacks` asks the red-team agent to generate a full indirect prompt injection scenario for each attempt. `replay` runs an already generated YAML scenario through the victim.
 
 If `tool_surface` or `tool_surface_file` is present, the MCP server list, tool names, descriptions, and JSON argument schemas are fixed by the config. The attacker still controls mocked tool responses in each generated scenario, but the harness rejects unknown servers/tools and replaces any attacker-edited schema metadata with the fixed config definitions before running the victim.
 
