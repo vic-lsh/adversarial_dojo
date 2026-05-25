@@ -89,7 +89,6 @@ def test_agentshim_attacker_adapter_asks_again_when_submission_tool_is_missing(m
                         "seed": {
                             "user_task": "Do work.",
                             "red_team_task": "Trigger sink.",
-                            "max_attempts": 1,
                         },
                         "environment": {
                             "mcp_servers": [

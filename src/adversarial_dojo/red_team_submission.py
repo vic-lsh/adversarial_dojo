@@ -8,7 +8,7 @@ import yaml
 from adversarial_dojo.mcp_harness import MockMcpHarness
 from adversarial_dojo.models import (
     AttackPatch,
-    AttackScenario,
+    AttackScenarioProposal,
     AttemptAnalysis,
     MockEnvironment,
     MockMcpServer,
@@ -66,8 +66,8 @@ def submission_tool_name(kind: SubmissionKind) -> str:
 def _submission_environment(kind: SubmissionKind) -> MockEnvironment:
     tool_name = _tool_name(kind)
     if kind == "scenario":
-        model = AttackScenario
-        description = "Submit the complete AttackScenario object. This is the only accepted way to return a candidate scenario."
+        model = AttackScenarioProposal
+        description = "Submit the complete AttackScenarioProposal object. This is the only accepted way to return a candidate scenario proposal."
     elif kind == "patch":
         model = AttackPatch
         description = "Submit the complete AttackPatch object. This is the only accepted way to return a patch proposal."

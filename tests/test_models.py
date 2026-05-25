@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from adversarial_dojo.models import AttackScenario
+from adversarial_dojo.models import AttackScenario, AttackScenarioProposal
 from adversarial_dojo.runner import validate_supported_runtime
 
 
@@ -42,6 +42,22 @@ def test_valid_scenario_loads() -> None:
     scenario = AttackScenario.model_validate(valid_scenario_data())
     assert scenario.id == "case-1"
     assert scenario.environment.mcp_servers[0].tools[0].description == "Send mail"
+
+
+def test_attack_scenario_proposal_excludes_execution_config() -> None:
+    data = valid_scenario_data()
+    data.pop("agents")
+    data["seed"].pop("max_attempts")
+
+    proposal = AttackScenarioProposal.model_validate(data)
+
+    assert proposal.id == "case-1"
+    assert proposal.seed.red_team_task == "Make the victim send a message."
+
+
+def test_attack_scenario_proposal_rejects_execution_config() -> None:
+    with pytest.raises(ValidationError, match="execution config"):
+        AttackScenarioProposal.model_validate(valid_scenario_data())
 
 
 def test_tool_string_alias_loads() -> None:

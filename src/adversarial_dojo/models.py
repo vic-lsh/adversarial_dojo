@@ -67,6 +67,28 @@ class ScenarioSeed(StrictModel):
     )
 
 
+class ScenarioSeedProposal(StrictModel):
+    user_task: str = Field(min_length=1)
+    red_team_task: str = Field(
+        min_length=1,
+        validation_alias=AliasChoices("red_team_task", "attacker_task"),
+        serialization_alias="red_team_task",
+    )
+    red_team_instructions: str = Field(
+        default="",
+        validation_alias=AliasChoices("red_team_instructions", "attacker_instructions"),
+        serialization_alias="red_team_instructions",
+    )
+
+    def to_seed(self, *, max_attempts: int = 1) -> ScenarioSeed:
+        return ScenarioSeed(
+            user_task=self.user_task,
+            red_team_task=self.red_team_task,
+            max_attempts=max_attempts,
+            red_team_instructions=self.red_team_instructions,
+        )
+
+
 class MockToolResponse(StrictModel):
     content: str = ""
     structured_content: dict[str, Any] | None = None
@@ -340,6 +362,53 @@ class AttackScenario(StrictModel):
         return yaml.safe_dump(self.model_dump(mode="json"), sort_keys=False)
 
 
+class AttackScenarioProposal(StrictModel):
+    id: str = Field(min_length=1)
+    seed: ScenarioSeedProposal
+    environment: MockEnvironment = Field(default_factory=MockEnvironment)
+    resources: list[ResourceSpec] = Field(default_factory=list)
+    secrets: list[SecretSpec] = Field(default_factory=list)
+    exfiltration_sinks: list[ExfiltrationSink] = Field(default_factory=list)
+    oracles: list[Oracle] = Field(min_length=1)
+
+    @field_validator("oracles")
+    @classmethod
+    def validate_oracles(cls, value: list[Oracle]) -> list[Oracle]:
+        if not value:
+            raise ValueError("at least one oracle is required")
+        return value
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_execution_config(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            forbidden = sorted(set(data) & {"agents"})
+            if forbidden:
+                raise ValueError(
+                    "attack scenario proposal must not include execution config fields: "
+                    + ", ".join(forbidden)
+                )
+            seed = data.get("seed")
+            if isinstance(seed, dict) and "max_attempts" in seed:
+                raise ValueError(
+                    "attack scenario proposal must not include seed.max_attempts; "
+                    "attack-search attempts are configured by the experiment"
+                )
+        return data
+
+    def to_attack_scenario(self, agents: ScenarioAgents) -> AttackScenario:
+        return AttackScenario(
+            id=self.id,
+            agents=agents,
+            seed=self.seed.to_seed(max_attempts=1),
+            environment=self.environment,
+            resources=self.resources,
+            secrets=self.secrets,
+            exfiltration_sinks=self.exfiltration_sinks,
+            oracles=self.oracles,
+        )
+
+
 class ToolCallRecord(StrictModel):
     server_name: str
     tool_name: str
@@ -432,6 +501,20 @@ def parse_attack_scenario(text: str) -> AttackScenario:
         raise ValueError("attack scenario must be a mapping")
     try:
         return AttackScenario.model_validate(loaded)
+    except ValidationError as exc:
+        raise ValueError(str(exc)) from exc
+
+
+def parse_attack_scenario_proposal(text: str) -> AttackScenarioProposal:
+    cleaned = _strip_code_fence(text)
+    try:
+        loaded = yaml.safe_load(cleaned)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"invalid YAML/JSON attack scenario proposal: {exc}") from exc
+    if not isinstance(loaded, dict):
+        raise ValueError("attack scenario proposal must be a mapping")
+    try:
+        return AttackScenarioProposal.model_validate(loaded)
     except ValidationError as exc:
         raise ValueError(str(exc)) from exc
 

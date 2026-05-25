@@ -12,6 +12,7 @@ from adversarial_dojo.artifacts import AttackSearchRecorder, SearchArtifactStore
 from adversarial_dojo.models import (
     AgentConfig,
     AttackScenario,
+    AttackScenarioProposal,
     AttemptAnalysis,
     AttemptRecord,
     BenchmarkResult,
@@ -20,7 +21,7 @@ from adversarial_dojo.models import (
     MockMcpServer,
     MockTool,
     ToolInvokedOracle,
-    parse_attack_scenario,
+    parse_attack_scenario_proposal,
 )
 from adversarial_dojo.oracles import all_oracles_passed, evaluate_oracles
 from adversarial_dojo.secrets import materialize_runtime_secrets
@@ -158,7 +159,7 @@ def _generate_prepared_scenario(
     artifact_store.write_raw_scenario(attempt_number, raw_scenario)
     try:
         return (
-            _prepare_generated_scenario(parse_attack_scenario(raw_scenario), config),
+            _prepare_generated_scenario(parse_attack_scenario_proposal(raw_scenario), config),
             None,
             True,
         )
@@ -200,7 +201,7 @@ def _repair_generated_scenario(
     if repaired:
         try:
             scenario = _prepare_generated_scenario(
-                parse_attack_scenario(repaired), config
+                parse_attack_scenario_proposal(repaired), config
             )
             return scenario, None, True
         except (KeyError, ValueError, ValidationError) as repair_exc:
@@ -317,11 +318,10 @@ def validate_supported_config(config: ExperimentConfig) -> None:
 
 
 def _prepare_generated_scenario(
-    scenario: AttackScenario, config: ExperimentConfig
+    proposal: AttackScenarioProposal, config: ExperimentConfig
 ) -> AttackScenario:
+    scenario = proposal.to_attack_scenario(config.agents)
     data = scenario.model_dump(mode="json")
-    data["agents"] = config.agents.model_dump(mode="json")
-    data["seed"]["max_attempts"] = 1
     if config.tool_surface is not None:
         data["environment"] = _apply_fixed_tool_surface(
             scenario.environment, config.tool_surface
