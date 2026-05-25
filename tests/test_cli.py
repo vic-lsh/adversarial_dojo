@@ -107,12 +107,40 @@ victim_profile = "A helpful agent with mocked MCP tools."
         encoding="utf-8",
     )
 
-    exit_code = main(["attack", str(config_path), "--out", str(out_dir)])
+    exit_code = main(["search-attacks", str(config_path), "--out", str(out_dir)])
 
     assert exit_code == 0
     assert (out_dir / "attempt-001" / "red_team_scenario.raw.txt").exists()
     assert (out_dir / "attempt-001" / "scenario.yaml").exists()
     assert json.loads((out_dir / "summary.json").read_text(encoding="utf-8"))["success"] is True
+
+
+def test_cli_attack_legacy_alias_still_works(tmp_path, capsys) -> None:
+    config_path = tmp_path / "config.toml"
+    out_dir = tmp_path / "attack-run"
+    config_path.write_text(
+        """
+id = "open-search"
+
+[agents.red_team]
+provider = "fake"
+
+[agents.victim]
+provider = "fake"
+
+[benchmark]
+max_attempts = 1
+victim_profile = "A helpful agent with mocked MCP tools."
+""",
+        encoding="utf-8",
+    )
+
+    exit_code = main(["attack", str(config_path), "--out", str(out_dir)])
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "deprecated" in captured.err
+    assert "search-attacks" in captured.err
 
 
 def test_cli_attack_applies_attacker_guidance_overrides(tmp_path) -> None:
@@ -140,7 +168,7 @@ red_team_guidance = "Avoid explicit automation banners."
 
     exit_code = main(
         [
-            "attack",
+            "search-attacks",
             str(config_path),
             "--out",
             str(out_dir),
@@ -181,7 +209,7 @@ victim_profile = "A helpful agent with mocked MCP tools."
 
     exit_code = main(
         [
-            "attack",
+            "search-attacks",
             str(config_path),
             "--out",
             str(out_dir),
