@@ -20,11 +20,9 @@ from adversarial_dojo.secrets import materialize_runtime_secrets
 
 def run_benchmark(
     scenario: AttackScenario,
-    overrides: dict[str, Any] | None = None,
     output_dir: str | Path | None = None,
 ) -> BenchmarkResult:
-    active_scenario = apply_overrides(scenario, overrides or {})
-    validate_supported_runtime(active_scenario)
+    active_scenario = scenario
     out_path = Path(output_dir) if output_dir is not None else None
     if out_path is not None:
         out_path.mkdir(parents=True, exist_ok=True)

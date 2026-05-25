@@ -35,12 +35,10 @@ from adversarial_dojo.secrets import materialize_runtime_secrets
 
 def run_attack_search(
     config: ExperimentConfig,
-    overrides: dict[str, Any] | None = None,
     output_dir: str | Path | None = None,
     resume: bool = False,
 ) -> BenchmarkResult:
-    active_config = apply_config_overrides(config, overrides or {})
-    validate_supported_config(active_config)
+    active_config = config
     out_path = Path(output_dir) if output_dir is not None else None
     if out_path is not None:
         out_path.mkdir(parents=True, exist_ok=True)

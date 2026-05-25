@@ -132,17 +132,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"invalid config: {exc}", file=sys.stderr)
             return 2
         try:
-            overrides = _attack_overrides(args)
-        except OSError as exc:
+            config = apply_config_overrides(config, _attack_overrides(args))
+        except (OSError, ValueError) as exc:
             print(f"invalid config: {exc}", file=sys.stderr)
             return 2
         try:
-            validate_supported_config(apply_config_overrides(config, overrides))
+            validate_supported_config(config)
         except ValueError as exc:
             print(f"invalid config: {exc}", file=sys.stderr)
             return 2
         out = args.out or str(Path("runs") / config.id)
-        result = run_attack_search(config, overrides=overrides, output_dir=out, resume=args.resume)
+        result = run_attack_search(config, output_dir=out, resume=args.resume)
         print(json.dumps(result.model_dump(mode="json", exclude={"attempts"}), indent=2))
         return 0
 
@@ -161,19 +161,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"valid scenario: {scenario.id}")
         return 0
 
-    overrides = _agent_overrides(args)
+    scenario = apply_overrides(scenario, _agent_overrides(args))
     try:
-        validate_supported_runtime(apply_overrides(scenario, overrides))
+        validate_supported_runtime(scenario)
     except ValueError as exc:
         print(f"invalid scenario: {exc}", file=sys.stderr)
         return 2
 
     out = args.out or str(Path("runs") / scenario.id)
-    result = run_benchmark(
-        scenario,
-        overrides=overrides,
-        output_dir=out,
-    )
+    result = run_benchmark(scenario, output_dir=out)
     print(json.dumps(result.model_dump(mode="json", exclude={"attempts"}), indent=2))
     return 0
 
