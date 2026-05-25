@@ -8,7 +8,15 @@ from typing import Any, Literal
 
 import yaml
 from jsonschema import Draft202012Validator, SchemaError
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 
 class StrictModel(BaseModel):
@@ -48,7 +56,9 @@ class ExperimentBenchmark(StrictModel):
     )
     red_team_guidance_file: str | None = Field(
         default=None,
-        validation_alias=AliasChoices("red_team_guidance_file", "attacker_guidance_file"),
+        validation_alias=AliasChoices(
+            "red_team_guidance_file", "attacker_guidance_file"
+        ),
         serialization_alias="red_team_guidance_file",
     )
     constraints: BenchmarkConstraints = Field(default_factory=BenchmarkConstraints)
@@ -106,9 +116,15 @@ class MockTool(StrictModel):
         serialization_alias="description",
     )
     args_schema: dict[str, Any] = Field(
-        default_factory=lambda: {"type": "object", "properties": {}, "additionalProperties": True}
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": True,
+        }
     )
-    responses: list[MockToolResponse] = Field(default_factory=lambda: [MockToolResponse(content="")])
+    responses: list[MockToolResponse] = Field(
+        default_factory=lambda: [MockToolResponse(content="")]
+    )
 
     @field_validator("args_schema")
     @classmethod
@@ -119,11 +135,14 @@ class MockTool(StrictModel):
             raise ValueError(f"invalid JSON schema: {exc.message}") from exc
         return value
 
-    def select_response(self, arguments: dict[str, Any], call_index: int = 0) -> MockToolResponse:
+    def select_response(
+        self, arguments: dict[str, Any], call_index: int = 0
+    ) -> MockToolResponse:
         matching = [
             response
             for response in self.responses
-            if response.match_args is None or _dict_contains(arguments, response.match_args)
+            if response.match_args is None
+            or _dict_contains(arguments, response.match_args)
         ]
         if not matching:
             return MockToolResponse(content="")
@@ -139,7 +158,9 @@ class MockMcpServer(StrictModel):
         names = [tool.name for tool in self.tools]
         duplicates = sorted({name for name in names if names.count(name) > 1})
         if duplicates:
-            raise ValueError(f"duplicate tool names in server {self.name}: {', '.join(duplicates)}")
+            raise ValueError(
+                f"duplicate tool names in server {self.name}: {', '.join(duplicates)}"
+            )
         return self
 
 
@@ -156,10 +177,15 @@ class MockEnvironment(StrictModel):
                     duplicates.append(f"{tool.name} ({seen[tool.name]}, {server.name})")
                 seen[tool.name] = server.name
         if duplicates:
-            raise ValueError("duplicate tool names across environment: " + ", ".join(sorted(duplicates)))
+            raise ValueError(
+                "duplicate tool names across environment: "
+                + ", ".join(sorted(duplicates))
+            )
         return self
 
-    def find_tool(self, server_name: str | None, tool_name: str) -> tuple[MockMcpServer, MockTool]:
+    def find_tool(
+        self, server_name: str | None, tool_name: str
+    ) -> tuple[MockMcpServer, MockTool]:
         for server in self.mcp_servers:
             if server_name is not None and server.name != server_name:
                 continue
@@ -184,26 +210,36 @@ class ExperimentConfig(StrictModel):
             data = tomllib.load(handle)
         if "tool_surface_file" in data:
             if "tool_surface" in data:
-                raise ValueError("config must define either tool_surface or tool_surface_file, not both")
+                raise ValueError(
+                    "config must define either tool_surface or tool_surface_file, not both"
+                )
             surface_path = Path(data["tool_surface_file"]).expanduser()
             if not surface_path.is_absolute():
                 surface_path = config_path.parent / surface_path
             from adversarial_dojo.tool_surfaces import load_tool_surface_file
 
-            data["tool_surface"] = load_tool_surface_file(surface_path).model_dump(mode="json")
+            data["tool_surface"] = load_tool_surface_file(surface_path).model_dump(
+                mode="json"
+            )
         benchmark = data.get("benchmark")
         guidance_file = None
         if isinstance(benchmark, dict):
-            guidance_file = benchmark.get("red_team_guidance_file") or benchmark.get("attacker_guidance_file")
+            guidance_file = benchmark.get("red_team_guidance_file") or benchmark.get(
+                "attacker_guidance_file"
+            )
         if guidance_file:
             guidance_path = Path(guidance_file).expanduser()
             if not guidance_path.is_absolute():
                 guidance_path = config_path.parent / guidance_path
             guidance_text = guidance_path.read_text(encoding="utf-8")
             existing_guidance = str(
-                benchmark.get("red_team_guidance", benchmark.get("attacker_guidance", ""))
+                benchmark.get(
+                    "red_team_guidance", benchmark.get("attacker_guidance", "")
+                )
             ).strip()
-            benchmark["red_team_guidance"] = _combine_guidance(existing_guidance, guidance_text)
+            benchmark["red_team_guidance"] = _combine_guidance(
+                existing_guidance, guidance_text
+            )
             benchmark["red_team_guidance_file"] = str(guidance_file)
             benchmark.pop("attacker_guidance", None)
             benchmark.pop("attacker_guidance_file", None)
@@ -287,7 +323,9 @@ class SecretExfiltratedEvaluator(Evaluator):
                 passed=False,
                 reason="secret_exfiltrated evaluator requires scenario context",
             )
-        secret = next((item for item in scenario.secrets if item.id == self.secret_id), None)
+        secret = next(
+            (item for item in scenario.secrets if item.id == self.secret_id), None
+        )
         if secret is None:
             return EvaluatorResult(
                 evaluator=self.model_dump(mode="json"),
@@ -308,7 +346,10 @@ class SecretExfiltratedEvaluator(Evaluator):
                 passed=False,
                 reason=f"no runtime secret value available for {self.secret_id}",
             )
-        sink = next((item for item in scenario.exfiltration_sinks if item.id == self.sink_id), None)
+        sink = next(
+            (item for item in scenario.exfiltration_sinks if item.id == self.sink_id),
+            None,
+        )
         if sink is None:
             return EvaluatorResult(
                 evaluator=self.model_dump(mode="json"),
@@ -382,24 +423,43 @@ class AttackScenario(StrictModel):
         sink_ids = {sink.id for sink in self.exfiltration_sinks}
         resource_ids = [resource.id for resource in self.resources]
         duplicate_resource_ids = sorted(
-            {resource_id for resource_id in resource_ids if resource_ids.count(resource_id) > 1}
+            {
+                resource_id
+                for resource_id in resource_ids
+                if resource_ids.count(resource_id) > 1
+            }
         )
         if duplicate_resource_ids:
-            raise ValueError(f"duplicate resource ids: {', '.join(duplicate_resource_ids)}")
+            raise ValueError(
+                f"duplicate resource ids: {', '.join(duplicate_resource_ids)}"
+            )
         resource_id_set = set(resource_ids)
         for evaluator in self.evaluators:
             if isinstance(evaluator, SecretExfiltratedEvaluator):
                 if evaluator.secret_id not in secret_ids:
-                    raise ValueError(f"secret_exfiltrated evaluator references unknown secret: {evaluator.secret_id}")
+                    raise ValueError(
+                        f"secret_exfiltrated evaluator references unknown secret: {evaluator.secret_id}"
+                    )
                 if evaluator.sink_id not in sink_ids:
-                    raise ValueError(f"secret_exfiltrated evaluator references unknown sink: {evaluator.sink_id}")
+                    raise ValueError(
+                        f"secret_exfiltrated evaluator references unknown sink: {evaluator.sink_id}"
+                    )
         for sink in self.exfiltration_sinks:
             self.environment.find_tool(sink.server, sink.tool)
         for secret in self.secrets:
-            if secret.resource_id is not None and secret.resource_id not in resource_id_set:
-                raise ValueError(f"secret {secret.id} references unknown resource: {secret.resource_id}")
-            if _is_unrendered_secret(secret) and not _environment_contains_text(self.environment, secret.token):
-                raise ValueError(f"secret placeholder {secret.token} must appear in at least one mocked tool response")
+            if (
+                secret.resource_id is not None
+                and secret.resource_id not in resource_id_set
+            ):
+                raise ValueError(
+                    f"secret {secret.id} references unknown resource: {secret.resource_id}"
+                )
+            if _is_unrendered_secret(secret) and not _environment_contains_text(
+                self.environment, secret.token
+            ):
+                raise ValueError(
+                    f"secret placeholder {secret.token} must appear in at least one mocked tool response"
+                )
         return self
 
     def apply_patch(self, patch: AttackPatch) -> AttackScenario:
@@ -411,13 +471,21 @@ class AttackScenario(StrictModel):
         if patch.environment is not None:
             data["environment"] = patch.environment.model_dump(mode="json")
         if patch.resources is not None:
-            data["resources"] = [resource.model_dump(mode="json") for resource in patch.resources]
+            data["resources"] = [
+                resource.model_dump(mode="json") for resource in patch.resources
+            ]
         if patch.secrets is not None:
-            data["secrets"] = [secret.model_dump(mode="json") for secret in patch.secrets]
+            data["secrets"] = [
+                secret.model_dump(mode="json") for secret in patch.secrets
+            ]
         if patch.exfiltration_sinks is not None:
-            data["exfiltration_sinks"] = [sink.model_dump(mode="json") for sink in patch.exfiltration_sinks]
+            data["exfiltration_sinks"] = [
+                sink.model_dump(mode="json") for sink in patch.exfiltration_sinks
+            ]
         if patch.evaluators is not None:
-            data["evaluators"] = [evaluator.model_dump(mode="json") for evaluator in patch.evaluators]
+            data["evaluators"] = [
+                evaluator.model_dump(mode="json") for evaluator in patch.evaluators
+            ]
         return AttackScenario.model_validate(data)
 
     @classmethod
@@ -430,7 +498,6 @@ class AttackScenario(StrictModel):
 
 
 class AttackScenarioProposal(StrictModel):
-    id: str = Field(min_length=1)
     seed: ScenarioSeedProposal
     environment: MockEnvironment = Field(default_factory=MockEnvironment)
     resources: list[ResourceSpec] = Field(default_factory=list)
@@ -456,13 +523,13 @@ class AttackScenarioProposal(StrictModel):
                 )
         return data
 
-    def to_attack_scenario(self, agents: ScenarioAgents) -> AttackScenario:
+    def to_attack_scenario(self, *, id: str, agents: ScenarioAgents) -> AttackScenario:
         evaluators = self.evaluators or _derive_secret_exfiltration_evaluators(
             secrets=self.secrets,
             exfiltration_sinks=self.exfiltration_sinks,
         )
         return AttackScenario(
-            id=self.id,
+            id=id,
             agents=agents,
             seed=self.seed.to_seed(max_attempts=1),
             environment=self.environment,
@@ -530,7 +597,9 @@ class AttemptAnalysis(StrictModel):
     progress_signals: list[str] = Field(default_factory=list)
     red_team_recommendations: list[str] = Field(
         default_factory=list,
-        validation_alias=AliasChoices("red_team_recommendations", "attacker_recommendations"),
+        validation_alias=AliasChoices(
+            "red_team_recommendations", "attacker_recommendations"
+        ),
         serialization_alias="red_team_recommendations",
     )
     evidence: list[str] = Field(default_factory=list)
@@ -629,7 +698,9 @@ def _dict_contains(actual: dict[str, Any], expected_subset: dict[str, Any]) -> b
             return False
         actual_value = actual[key]
         if isinstance(expected_value, dict):
-            if not isinstance(actual_value, dict) or not _dict_contains(actual_value, expected_value):
+            if not isinstance(actual_value, dict) or not _dict_contains(
+                actual_value, expected_value
+            ):
                 return False
         elif actual_value != expected_value:
             return False
@@ -640,10 +711,14 @@ def dict_contains(actual: dict[str, Any], expected_subset: dict[str, Any]) -> bo
     return _dict_contains(actual, expected_subset)
 
 
-def _secret_access_failure_reason(scenario: AttackScenario, resource_id: str | None) -> str | None:
+def _secret_access_failure_reason(
+    scenario: AttackScenario, resource_id: str | None
+) -> str | None:
     if resource_id is None:
         return None
-    resource = next((item for item in scenario.resources if item.id == resource_id), None)
+    resource = next(
+        (item for item in scenario.resources if item.id == resource_id), None
+    )
     if resource is None:
         return f"secret resource {resource_id} is not declared"
     if resource.red_team_access:
@@ -668,10 +743,14 @@ def _environment_contains_text(environment: MockEnvironment, needle: str) -> boo
             for response in tool.responses:
                 if needle in response.content:
                     return True
-                if response.structured_content is not None and needle in str(response.structured_content):
+                if response.structured_content is not None and needle in str(
+                    response.structured_content
+                ):
                     return True
     return False
 
 
 def _is_unrendered_secret(secret: SecretSpec) -> bool:
-    return secret.placeholder is not None or secret.token == f"{{{{secret.{secret.id}}}}}"
+    return (
+        secret.placeholder is not None or secret.token == f"{{{{secret.{secret.id}}}}}"
+    )

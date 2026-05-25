@@ -85,7 +85,6 @@ def test_agentshim_attacker_adapter_asks_again_when_submission_tool_is_missing(m
                 self.event_handler.on_tool_call(
                     f"mcp__{SUBMISSION_SERVER_NAME}__{SUBMIT_SCENARIO_TOOL}",
                     {
-                        "id": "submitted",
                         "seed": {
                             "user_task": "Do work.",
                             "red_team_task": "Trigger sink.",
@@ -134,7 +133,7 @@ def test_agentshim_attacker_adapter_asks_again_when_submission_tool_is_missing(m
 
     assert len(prompts) == 2
     assert "did not call the required MCP tool" in prompts[1]
-    assert "id: submitted" in response
+    assert "user_task: Do work." in response
 
 
 def test_agentshim_analyzer_adapter_uses_structured_submission(monkeypatch, tmp_path) -> None:

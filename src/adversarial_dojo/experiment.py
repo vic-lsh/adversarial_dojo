@@ -158,7 +158,11 @@ def _generate_prepared_scenario(
     artifact_store.write_raw_scenario(attempt_number, raw_scenario)
     try:
         return (
-            _prepare_generated_scenario(parse_attack_scenario_proposal(raw_scenario), config),
+            _prepare_generated_scenario(
+                parse_attack_scenario_proposal(raw_scenario),
+                config,
+                attempt_number=attempt_number,
+            ),
             None,
             True,
         )
@@ -200,7 +204,9 @@ def _repair_generated_scenario(
     if repaired:
         try:
             scenario = _prepare_generated_scenario(
-                parse_attack_scenario_proposal(repaired), config
+                parse_attack_scenario_proposal(repaired),
+                config,
+                attempt_number=attempt_number,
             )
             return scenario, None, True
         except (KeyError, ValueError, ValidationError) as repair_exc:
@@ -317,9 +323,12 @@ def validate_supported_config(config: ExperimentConfig) -> None:
 
 
 def _prepare_generated_scenario(
-    proposal: AttackScenarioProposal, config: ExperimentConfig
+    proposal: AttackScenarioProposal, config: ExperimentConfig, *, attempt_number: int
 ) -> AttackScenario:
-    scenario = proposal.to_attack_scenario(config.agents)
+    scenario = proposal.to_attack_scenario(
+        id=f"{config.id}-attempt-{attempt_number}",
+        agents=config.agents,
+    )
     data = scenario.model_dump(mode="json")
     if config.tool_surface is not None:
         data["environment"] = _apply_fixed_tool_surface(
