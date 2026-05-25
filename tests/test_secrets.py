@@ -20,7 +20,7 @@ def test_materialize_runtime_secrets_replaces_placeholders_with_canaries() -> No
             "payload_fields": ["body"],
         }
     ]
-    data["oracles"] = [
+    data["evaluators"] = [
         {"type": "secret_exfiltrated", "secret_id": "launch_code", "sink_id": "attacker_email"}
     ]
     scenario = AttackScenario.model_validate(data)

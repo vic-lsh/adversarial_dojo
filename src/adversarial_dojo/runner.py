@@ -14,7 +14,7 @@ from adversarial_dojo.models import (
     BenchmarkResult,
     parse_attack_patch,
 )
-from adversarial_dojo.oracles import all_oracles_passed, evaluate_oracles
+from adversarial_dojo.evaluators import all_evaluators_passed, run_evaluators
 from adversarial_dojo.secrets import materialize_runtime_secrets
 
 
@@ -54,13 +54,14 @@ def run_benchmark(
         try:
             patch = parse_attack_patch(patch_text)
         except ValueError as exc:
+            repair_error = str(exc)
             try:
                 repair_text = _with_agent_crash_retries(
                     lambda: red_team.propose_patch(
                         active_scenario,
                         attempt_number,
                         attempts,
-                        repair_error=str(exc),
+                        repair_error=repair_error,
                         output_dir=attempt_dir,
                     )
                 )
@@ -113,20 +114,20 @@ def run_benchmark(
             _append_attempt(attempts_path, record)
             active_scenario = candidate
             continue
-        oracle_results = evaluate_oracles(
-            rendered_candidate.oracles,
+        evaluator_results = run_evaluators(
+            rendered_candidate.evaluators,
             victim_result.tool_calls,
             scenario=rendered_candidate,
             runtime_secrets=runtime_secrets.values,
         )
-        success = all_oracles_passed(oracle_results)
+        success = all_evaluators_passed(evaluator_results)
         record = AttemptRecord(
             attempt=attempt_number,
             patch=patch.model_dump(mode="json"),
             victim_prompt=rendered_candidate.seed.user_task,
             victim_output=victim_result.final_text,
             tool_calls=victim_result.tool_calls,
-            oracle_results=oracle_results,
+            evaluator_results=evaluator_results,
             success=success,
         )
         attempts.append(record)
@@ -203,8 +204,8 @@ def _write_attempt_artifacts(
     _write_json(attempt_dir, "tool_calls.json", [call.model_dump(mode="json") for call in record.tool_calls])
     _write_json(
         attempt_dir,
-        "oracle_results.json",
-        [result.model_dump(mode="json") for result in record.oracle_results],
+        "evaluator_results.json",
+        [result.model_dump(mode="json") for result in record.evaluator_results],
     )
     _write_json(attempt_dir, "analysis.json", record.analysis.model_dump(mode="json") if record.analysis else None)
     _write_text(attempt_dir, "victim_prompt.txt", record.victim_prompt or "")

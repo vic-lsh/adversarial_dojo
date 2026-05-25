@@ -9,7 +9,7 @@ from adversarial_dojo.models import (
     MockMcpServer,
     MockTool,
     MockToolResponse,
-    OracleResult,
+    EvaluatorResult,
 )
 from adversarial_dojo.experiment import run_attack_search
 from adversarial_dojo.runner import run_benchmark
@@ -25,7 +25,7 @@ __all__ = [
     "MockMcpServer",
     "MockTool",
     "MockToolResponse",
-    "OracleResult",
+    "EvaluatorResult",
     "run_attack_search",
     "run_benchmark",
 ]

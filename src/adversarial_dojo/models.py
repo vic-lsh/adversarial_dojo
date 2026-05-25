@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tomllib
 from pathlib import Path
+from enum import StrEnum
 from typing import Any, Literal
 
 import yaml
@@ -213,10 +214,8 @@ def _combine_guidance(*parts: str) -> str:
     return "\n\n".join(cleaned)
 
 
-class ToolInvokedOracle(StrictModel):
-    type: Literal["tool_invoked"] = "tool_invoked"
-    tool_name: str = Field(min_length=1)
-    args_subset: dict[str, Any] = Field(default_factory=dict, validation_alias=AliasChoices("args_subset", "arguments"))
+class EvaluatorType(StrEnum):
+    SECRET_EXFILTRATED = "secret_exfiltrated"
 
 
 class SecretSpec(StrictModel):
@@ -255,13 +254,13 @@ class ExfiltrationSink(StrictModel):
         return f"{self.server}.{self.tool}"
 
 
-class SecretExfiltratedOracle(StrictModel):
-    type: Literal["secret_exfiltrated"] = "secret_exfiltrated"
+class SecretExfiltratedEvaluator(StrictModel):
+    type: Literal[EvaluatorType.SECRET_EXFILTRATED] = EvaluatorType.SECRET_EXFILTRATED
     secret_id: str = Field(min_length=1)
     sink_id: str = Field(min_length=1)
 
 
-Oracle = ToolInvokedOracle | SecretExfiltratedOracle
+Evaluator = SecretExfiltratedEvaluator
 
 
 class AttackPatch(StrictModel):
@@ -272,7 +271,7 @@ class AttackPatch(StrictModel):
         serialization_alias="red_team_task",
     )
     environment: MockEnvironment | None = None
-    oracles: list[Oracle] | None = None
+    evaluators: list[Evaluator] | None = None
     resources: list[ResourceSpec] | None = None
     secrets: list[SecretSpec] | None = None
     exfiltration_sinks: list[ExfiltrationSink] | None = None
@@ -283,7 +282,7 @@ class AttackPatch(StrictModel):
             self.user_task is None
             and self.red_team_task is None
             and self.environment is None
-            and self.oracles is None
+            and self.evaluators is None
             and self.resources is None
             and self.secrets is None
             and self.exfiltration_sinks is None
@@ -300,14 +299,7 @@ class AttackScenario(StrictModel):
     resources: list[ResourceSpec] = Field(default_factory=list)
     secrets: list[SecretSpec] = Field(default_factory=list)
     exfiltration_sinks: list[ExfiltrationSink] = Field(default_factory=list)
-    oracles: list[Oracle] = Field(min_length=1)
-
-    @field_validator("oracles")
-    @classmethod
-    def validate_oracles(cls, value: list[Oracle]) -> list[Oracle]:
-        if not value:
-            raise ValueError("at least one oracle is required")
-        return value
+    evaluators: list[Evaluator] = Field(min_length=1)
 
     @model_validator(mode="after")
     def validate_secret_exfiltration_references(self) -> AttackScenario:
@@ -320,12 +312,12 @@ class AttackScenario(StrictModel):
         if duplicate_resource_ids:
             raise ValueError(f"duplicate resource ids: {', '.join(duplicate_resource_ids)}")
         resource_id_set = set(resource_ids)
-        for oracle in self.oracles:
-            if isinstance(oracle, SecretExfiltratedOracle):
-                if oracle.secret_id not in secret_ids:
-                    raise ValueError(f"secret_exfiltrated oracle references unknown secret: {oracle.secret_id}")
-                if oracle.sink_id not in sink_ids:
-                    raise ValueError(f"secret_exfiltrated oracle references unknown sink: {oracle.sink_id}")
+        for evaluator in self.evaluators:
+            if isinstance(evaluator, SecretExfiltratedEvaluator):
+                if evaluator.secret_id not in secret_ids:
+                    raise ValueError(f"secret_exfiltrated evaluator references unknown secret: {evaluator.secret_id}")
+                if evaluator.sink_id not in sink_ids:
+                    raise ValueError(f"secret_exfiltrated evaluator references unknown sink: {evaluator.sink_id}")
         for sink in self.exfiltration_sinks:
             self.environment.find_tool(sink.server, sink.tool)
         for secret in self.secrets:
@@ -349,8 +341,8 @@ class AttackScenario(StrictModel):
             data["secrets"] = [secret.model_dump(mode="json") for secret in patch.secrets]
         if patch.exfiltration_sinks is not None:
             data["exfiltration_sinks"] = [sink.model_dump(mode="json") for sink in patch.exfiltration_sinks]
-        if patch.oracles is not None:
-            data["oracles"] = [oracle.model_dump(mode="json") for oracle in patch.oracles]
+        if patch.evaluators is not None:
+            data["evaluators"] = [evaluator.model_dump(mode="json") for evaluator in patch.evaluators]
         return AttackScenario.model_validate(data)
 
     @classmethod
@@ -369,14 +361,7 @@ class AttackScenarioProposal(StrictModel):
     resources: list[ResourceSpec] = Field(default_factory=list)
     secrets: list[SecretSpec] = Field(default_factory=list)
     exfiltration_sinks: list[ExfiltrationSink] = Field(default_factory=list)
-    oracles: list[Oracle] = Field(min_length=1)
-
-    @field_validator("oracles")
-    @classmethod
-    def validate_oracles(cls, value: list[Oracle]) -> list[Oracle]:
-        if not value:
-            raise ValueError("at least one oracle is required")
-        return value
+    evaluators: list[Evaluator] | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -397,6 +382,10 @@ class AttackScenarioProposal(StrictModel):
         return data
 
     def to_attack_scenario(self, agents: ScenarioAgents) -> AttackScenario:
+        evaluators = self.evaluators or _derive_secret_exfiltration_evaluators(
+            secrets=self.secrets,
+            exfiltration_sinks=self.exfiltration_sinks,
+        )
         return AttackScenario(
             id=self.id,
             agents=agents,
@@ -405,8 +394,24 @@ class AttackScenarioProposal(StrictModel):
             resources=self.resources,
             secrets=self.secrets,
             exfiltration_sinks=self.exfiltration_sinks,
-            oracles=self.oracles,
+            evaluators=evaluators,
         )
+
+
+def _derive_secret_exfiltration_evaluators(
+    *, secrets: list[SecretSpec], exfiltration_sinks: list[ExfiltrationSink]
+) -> list[SecretExfiltratedEvaluator]:
+    if len(secrets) == 1 and len(exfiltration_sinks) == 1:
+        return [
+            SecretExfiltratedEvaluator(
+                secret_id=secrets[0].id,
+                sink_id=exfiltration_sinks[0].id,
+            )
+        ]
+    raise ValueError(
+        "attack scenario proposal must include evaluators unless it declares exactly one secret "
+        "and exactly one exfiltration sink"
+    )
 
 
 class ToolCallRecord(StrictModel):
@@ -422,8 +427,8 @@ class ToolCallRecord(StrictModel):
         return f"{self.server_name}.{self.tool_name}"
 
 
-class OracleResult(StrictModel):
-    oracle: dict[str, Any]
+class EvaluatorResult(StrictModel):
+    evaluator: dict[str, Any]
     passed: bool
     reason: str
 
@@ -463,7 +468,7 @@ class AttemptRecord(StrictModel):
     victim_prompt: str | None = None
     victim_output: str = ""
     tool_calls: list[ToolCallRecord] = Field(default_factory=list)
-    oracle_results: list[OracleResult] = Field(default_factory=list)
+    evaluator_results: list[EvaluatorResult] = Field(default_factory=list)
     analysis: AttemptAnalysis | None = None
     success: bool = False
 

@@ -20,10 +20,9 @@ from adversarial_dojo.models import (
     MockEnvironment,
     MockMcpServer,
     MockTool,
-    ToolInvokedOracle,
     parse_attack_scenario_proposal,
 )
-from adversarial_dojo.oracles import all_oracles_passed, evaluate_oracles
+from adversarial_dojo.evaluators import all_evaluators_passed, run_evaluators
 from adversarial_dojo.secrets import materialize_runtime_secrets
 
 
@@ -233,8 +232,8 @@ def _run_generated_scenario(
             victim_prompt=rendered_scenario.seed.user_task,
         )
 
-    oracle_results = evaluate_oracles(
-        rendered_scenario.oracles,
+    evaluator_results = run_evaluators(
+        rendered_scenario.evaluators,
         victim_result.tool_calls,
         scenario=rendered_scenario,
         runtime_secrets=runtime_secrets.values,
@@ -245,8 +244,8 @@ def _run_generated_scenario(
         victim_prompt=rendered_scenario.seed.user_task,
         victim_output=victim_result.final_text,
         tool_calls=victim_result.tool_calls,
-        oracle_results=oracle_results,
-        success=all_oracles_passed(oracle_results),
+        evaluator_results=evaluator_results,
+        success=all_evaluators_passed(evaluator_results),
     )
 
 
@@ -399,16 +398,6 @@ def _validate_generated_scenario(
         raise ValueError(
             f"generated scenario defines {server_count} MCP servers, max is {constraints.max_mcp_servers}"
         )
-    if has_fixed_surface:
-        for oracle in scenario.oracles:
-            if isinstance(oracle, ToolInvokedOracle):
-                server_name, tool_name = _split_qualified_tool_name(oracle.tool_name)
-                try:
-                    scenario.environment.find_tool(server_name, tool_name)
-                except KeyError as exc:
-                    raise ValueError(
-                        f"tool_invoked oracle references tool outside fixed tool_surface: {oracle.tool_name}"
-                    ) from exc
     for server in scenario.environment.mcp_servers:
         tool_count = len(server.tools)
         if not has_fixed_surface and tool_count > constraints.max_tools_per_server:
