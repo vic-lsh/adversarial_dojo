@@ -38,7 +38,6 @@ def run_attack_search(
     output_dir: str | Path | None = None,
     resume: bool = False,
 ) -> BenchmarkResult:
-    active_config = config
     out_path = Path(output_dir) if output_dir is not None else None
     if out_path is not None:
         out_path.mkdir(parents=True, exist_ok=True)
@@ -47,15 +46,15 @@ def run_attack_search(
             attempts_path.write_text("", encoding="utf-8")
         elif not attempts_path.exists():
             attempts_path.write_text("", encoding="utf-8")
-        _write_json(out_path, "config.json", active_config.model_dump(mode="json"))
+        _write_json(out_path, "config.json", config.model_dump(mode="json"))
     else:
         attempts_path = None
 
     attempts: list[AttemptRecord] = _load_attempts(attempts_path) if resume else []
     winning_attempt: int | None = next((attempt.attempt for attempt in attempts if attempt.success), None)
     start_attempt = max((attempt.attempt for attempt in attempts), default=0) + 1
-    if active_config.agents.analyzer is None:
-        analyzer_config = active_config.agents.red_team
+    if config.agents.analyzer is None:
+        analyzer_config = config.agents.red_team
         print(
             "warning: analyzer agent not configured; inheriting red_team config "
             f"(provider={analyzer_config.provider}, model={analyzer_config.model}) "
@@ -63,19 +62,19 @@ def run_attack_search(
             file=sys.stderr,
         )
     else:
-        analyzer_config = active_config.agents.analyzer
+        analyzer_config = config.agents.analyzer
 
-    for attempt_number in range(start_attempt, active_config.benchmark.max_attempts + 1):
+    for attempt_number in range(start_attempt, config.benchmark.max_attempts + 1):
         if winning_attempt is not None:
             break
         attempt_dir = _attempt_dir(out_path, attempt_number)
-        red_team = make_runner("red_team", active_config.agents.red_team)
+        red_team = make_runner("red_team", config.agents.red_team)
         analyzer = make_runner("analyzer", analyzer_config)
         scenario = None
         scenario_error = None
         try:
             raw_scenario = _with_agent_crash_retries(
-                lambda: red_team.propose_scenario(active_config, attempt_number, attempts, output_dir=attempt_dir)
+                lambda: red_team.propose_scenario(config, attempt_number, attempts, output_dir=attempt_dir)
             )
         except RuntimeError as exc:
             record = AttemptRecord(attempt=attempt_number, patch_error=f"red team agent crashed: {exc}")
@@ -85,12 +84,12 @@ def run_attack_search(
             continue
         _write_text(attempt_dir, "red_team_scenario.raw.txt", raw_scenario)
         try:
-            scenario = _prepare_generated_scenario(parse_attack_scenario(raw_scenario), active_config)
+            scenario = _prepare_generated_scenario(parse_attack_scenario(raw_scenario), config)
         except (KeyError, ValueError, ValidationError) as exc:
             try:
                 repaired = _with_agent_crash_retries(
                     lambda: red_team.propose_scenario(
-                        active_config,
+                        config,
                         attempt_number,
                         attempts,
                         repair_error=str(exc),
@@ -103,7 +102,7 @@ def run_attack_search(
             _write_text(attempt_dir, "red_team_repair_scenario.raw.txt", repaired)
             if repaired:
                 try:
-                    scenario = _prepare_generated_scenario(parse_attack_scenario(repaired), active_config)
+                    scenario = _prepare_generated_scenario(parse_attack_scenario(repaired), config)
                 except (KeyError, ValueError, ValidationError) as repair_exc:
                     scenario_error = str(repair_exc)
 
@@ -112,7 +111,7 @@ def run_attack_search(
             _write_attempt_artifacts(attempt_dir, record=record, scenario=None)
             _attach_attempt_analysis(
                 analyzer=analyzer,
-                config=active_config,
+                config=config,
                 scenario=None,
                 record=record,
                 attempt_number=attempt_number,
@@ -139,7 +138,7 @@ def run_attack_search(
             _write_attempt_artifacts(attempt_dir, record=record, scenario=rendered_scenario)
             _attach_attempt_analysis(
                 analyzer=analyzer,
-                config=active_config,
+                config=config,
                 scenario=rendered_scenario,
                 record=record,
                 attempt_number=attempt_number,
@@ -168,7 +167,7 @@ def run_attack_search(
         _write_attempt_artifacts(attempt_dir, record=record, scenario=rendered_scenario)
         _attach_attempt_analysis(
             analyzer=analyzer,
-            config=active_config,
+            config=config,
             scenario=rendered_scenario,
             record=record,
             attempt_number=attempt_number,
@@ -182,7 +181,7 @@ def run_attack_search(
             break
 
     result = BenchmarkResult(
-        scenario_id=active_config.id,
+        scenario_id=config.id,
         success=winning_attempt is not None,
         winning_attempt=winning_attempt,
         total_attempts=len(attempts),
