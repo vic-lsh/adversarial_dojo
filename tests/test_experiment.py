@@ -4,6 +4,7 @@ import json
 
 import yaml
 
+import adversarial_dojo.cli as cli_module
 import adversarial_dojo.experiment as experiment_module
 from adversarial_dojo.agents import FakeAgentRunner, _scenario_generation_prompt
 from adversarial_dojo.experiment import run_attack_search
@@ -373,7 +374,7 @@ def test_apply_config_overrides_supports_analyzer_overrides() -> None:
     data["agents"]["red_team"] = {"provider": "fake", "model": "red-team-model"}
     config = ExperimentConfig.model_validate(data)
 
-    overridden = experiment_module.apply_config_overrides(
+    overridden = cli_module.apply_config_overrides(
         config,
         {"analyzer_provider": "fake", "analyzer_model": "haiku-override"},
     )

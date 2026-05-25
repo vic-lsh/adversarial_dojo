@@ -5,12 +5,13 @@ import json
 import sys
 import warnings
 from pathlib import Path
+from typing import Any
 
 from pydantic import ValidationError
 
-from adversarial_dojo.experiment import apply_config_overrides, run_attack_search, validate_supported_config
+from adversarial_dojo.experiment import run_attack_search, validate_supported_config
 from adversarial_dojo.models import AttackScenario, ExperimentConfig
-from adversarial_dojo.runner import apply_overrides, run_benchmark, validate_supported_runtime
+from adversarial_dojo.runner import _override_agent, apply_overrides, run_benchmark, validate_supported_runtime
 
 
 _DEPRECATED_ALIASES = {
@@ -231,6 +232,32 @@ def _attack_overrides(args: argparse.Namespace) -> dict[str, str | None]:
     if guidance_parts:
         overrides["red_team_guidance"] = "\n\n".join(part.strip() for part in guidance_parts if part.strip())
     return overrides
+
+
+def apply_config_overrides(
+    config: ExperimentConfig, overrides: dict[str, Any]
+) -> ExperimentConfig:
+    if not overrides:
+        return config
+    data = config.model_dump(mode="json")
+    _override_agent(data["agents"]["red_team"], overrides, "red_team")
+    _override_agent(data["agents"]["victim"], overrides, "victim")
+    analyzer_provider = overrides.get("analyzer_provider")
+    analyzer_model = overrides.get("analyzer_model")
+    if analyzer_provider or analyzer_model:
+        analyzer_data = data["agents"].get("analyzer")
+        if analyzer_data is None:
+            # Seed analyzer config from red_team so a partial override (e.g. only
+            # --analyzer-model) still produces a complete AgentConfig.
+            analyzer_data = dict(data["agents"]["red_team"])
+        _override_agent(analyzer_data, overrides, "analyzer")
+        data["agents"]["analyzer"] = analyzer_data
+    red_team_guidance = overrides.get(
+        "red_team_guidance", overrides.get("attacker_guidance")
+    )
+    if red_team_guidance is not None:
+        data["benchmark"]["red_team_guidance"] = red_team_guidance
+    return ExperimentConfig.model_validate(data)
 
 
 if __name__ == "__main__":
