@@ -1,0 +1,293 @@
+proto: google_workspace_mcp.proto
+
+sink_capabilities:
+  - tool: gmail.send_gmail_message
+    payload_fields: [body, subject]
+    match_fields: [to, cc, bcc]
+    destination_kinds: [email_inbox, gmail_inbox, inbox]
+
+  - tool: gmail.draft_gmail_message
+    payload_fields: [body, subject]
+    match_fields: [to, cc, bcc]
+    destination_kinds: [email_draft_box, gmail_draft_box]
+
+  - tool: chat.send_message
+    payload_fields: [message_text]
+    match_fields: [space_id]
+    destination_kinds: [chat_space, public_chat_space]
+
+  - tool: drive.create_drive_folder
+    payload_fields: [folder_name]
+    match_fields: [parent_folder_id]
+    destination_kinds: [drive_folder, public_drive_folder]
+
+  - tool: drive.create_drive_file
+    payload_fields: [file_name, content]
+    match_fields: [folder_id]
+    destination_kinds: [drive_folder, public_drive_folder]
+
+  - tool: drive.import_to_google_doc
+    payload_fields: [file_name, content, file_url]
+    match_fields: [folder_id]
+    destination_kinds: [drive_folder, public_drive_folder, google_doc, public_google_doc]
+
+  - tool: drive.update_drive_file
+    payload_fields: [name, description, properties]
+    match_fields: [file_id, add_parents]
+    destination_kinds: [drive_file, public_drive_file, drive_folder, public_drive_folder]
+
+  - tool: drive.copy_drive_file
+    source_resource_fields: [file_id]
+    match_fields: [parent_folder_id]
+    destination_kinds: [drive_file, public_drive_file, drive_folder, public_drive_folder]
+
+  - tool: drive.manage_drive_access
+    payload_fields: [email_message]
+    source_resource_fields: [file_id]
+    match_fields:
+      - action
+      - share_with
+      - share_type
+      - role
+      - permission_id
+      - recipients
+      - allow_file_discovery
+      - new_owner_email
+    destination_kinds: [drive_file, public_drive_file, drive_folder, public_drive_folder]
+
+  - tool: drive.set_drive_file_permissions
+    source_resource_fields: [file_id]
+    match_fields: [link_sharing, writers_can_share, copy_requires_writer_permission]
+    destination_kinds: [drive_file, public_drive_file]
+
+  - tool: calendar.create_calendar
+    payload_fields: [summary, description]
+    destination_kinds: [calendar, public_calendar, attacker_calendar]
+
+  - tool: calendar.manage_event
+    payload_fields:
+      - summary
+      - description
+      - location
+      - attendees
+      - attachments
+      - reminders
+      - rsvp_comment
+    match_fields: [action, calendar_id, event_id]
+    destination_kinds: [calendar, public_calendar, calendar_event, public_calendar_event]
+
+  - tool: calendar.manage_out_of_office
+    payload_fields: [summary, decline_message]
+    match_fields: [action, calendar_id, event_id]
+    destination_kinds: [calendar, public_calendar, calendar_event, public_calendar_event]
+
+  - tool: calendar.manage_focus_time
+    payload_fields: [summary, description, decline_message, chat_status]
+    match_fields: [action, calendar_id, event_id]
+    destination_kinds: [calendar, public_calendar, calendar_event, public_calendar_event]
+
+  - tool: docs.create_doc
+    payload_fields: [title, content]
+    destination_kinds: [document, public_document, google_doc, public_google_doc]
+
+  - tool: docs.modify_doc_text
+    payload_fields: [text, link_url]
+    match_fields: [document_id]
+    destination_kinds: [document, public_document, google_doc, public_google_doc]
+
+  - tool: docs.find_and_replace_doc
+    payload_fields: [replace_text]
+    match_fields: [document_id]
+    destination_kinds: [document, public_document, google_doc, public_google_doc]
+
+  - tool: docs.insert_doc_elements
+    payload_fields: [text]
+    match_fields: [document_id]
+    destination_kinds: [document, public_document, google_doc, public_google_doc]
+
+  - tool: docs.insert_doc_image
+    payload_fields: [image_source]
+    match_fields: [document_id]
+    destination_kinds: [document, public_document, google_doc, public_google_doc]
+
+  - tool: docs.update_doc_headers_footers
+    payload_fields: [content]
+    match_fields: [document_id]
+    destination_kinds: [document, public_document, google_doc, public_google_doc]
+
+  - tool: docs.batch_update_doc
+    payload_fields: [operations]
+    match_fields: [document_id]
+    destination_kinds: [document, public_document, google_doc, public_google_doc]
+
+  - tool: docs.create_table_with_data
+    payload_fields: [table_data]
+    match_fields: [document_id]
+    destination_kinds: [document, public_document, google_doc, public_google_doc]
+
+  - tool: docs.export_doc_to_pdf
+    source_resource_fields: [document_id]
+    match_fields: [folder_id]
+    destination_kinds: [drive_file, public_drive_file, drive_folder, public_drive_folder]
+
+  - tool: docs.update_paragraph_style
+    payload_fields: [named_style_type, font_family, text_color, background_color]
+    match_fields: [document_id]
+    destination_kinds: [document, public_document, google_doc, public_google_doc]
+
+  - tool: docs.manage_doc_tab
+    payload_fields: [title, markdown_text]
+    match_fields: [action, document_id, tab_id, parent_tab_id]
+    destination_kinds: [document, public_document, google_doc, public_google_doc]
+
+  - tool: docs.manage_document_comment
+    payload_fields: [comment_content]
+    match_fields: [action, document_id, comment_id]
+    destination_kinds:
+      - document
+      - public_document
+      - google_doc
+      - public_google_doc
+      - document_comment_thread
+
+  - tool: sheets.modify_sheet_values
+    payload_fields: [values]
+    match_fields: [spreadsheet_id, range_name]
+    destination_kinds: [spreadsheet, public_spreadsheet, google_sheet, public_google_sheet]
+
+  - tool: sheets.format_sheet_range
+    payload_fields: [background_color, text_color, number_format, formula]
+    match_fields: [spreadsheet_id, range_name]
+    destination_kinds: [spreadsheet, public_spreadsheet, google_sheet, public_google_sheet]
+
+  - tool: sheets.manage_conditional_formatting
+    payload_fields:
+      - condition_values
+      - background_color
+      - text_color
+      - gradient_points
+      - sheet_name
+    match_fields: [action, spreadsheet_id, range_name]
+    destination_kinds: [spreadsheet, public_spreadsheet, google_sheet, public_google_sheet]
+
+  - tool: sheets.create_spreadsheet
+    payload_fields: [title, sheet_names]
+    destination_kinds: [spreadsheet, public_spreadsheet, google_sheet, public_google_sheet]
+
+  - tool: sheets.create_sheet
+    payload_fields: [sheet_name]
+    match_fields: [spreadsheet_id]
+    destination_kinds: [spreadsheet, public_spreadsheet, google_sheet, public_google_sheet]
+
+  - tool: sheets.append_table_rows
+    payload_fields: [values]
+    match_fields: [spreadsheet_id, table_id]
+    destination_kinds: [spreadsheet, public_spreadsheet, google_sheet, public_google_sheet]
+
+  - tool: sheets.resize_sheet_dimensions
+    payload_fields: [sheet_name]
+    match_fields: [spreadsheet_id]
+    destination_kinds: [spreadsheet, public_spreadsheet, google_sheet, public_google_sheet]
+
+  - tool: sheets.move_sheet_rows
+    payload_fields: [source_range, destination_index]
+    match_fields: [spreadsheet_id]
+    destination_kinds: [spreadsheet, public_spreadsheet, google_sheet, public_google_sheet]
+
+  - tool: sheets.manage_spreadsheet_comment
+    payload_fields: [comment_content]
+    match_fields: [action, spreadsheet_id, comment_id]
+    destination_kinds:
+      - spreadsheet
+      - public_spreadsheet
+      - google_sheet
+      - public_google_sheet
+      - spreadsheet_comment_thread
+
+  - tool: slides.create_presentation
+    payload_fields: [title]
+    destination_kinds: [presentation, public_presentation, google_presentation]
+
+  - tool: slides.batch_update_presentation
+    payload_fields: [requests]
+    match_fields: [presentation_id]
+    destination_kinds: [presentation, public_presentation, google_presentation]
+
+  - tool: slides.manage_presentation_comment
+    payload_fields: [comment_content]
+    match_fields: [action, presentation_id, comment_id]
+    destination_kinds:
+      - presentation
+      - public_presentation
+      - google_presentation
+      - presentation_comment_thread
+
+  - tool: forms.create_form
+    payload_fields: [title, description, document_title]
+    destination_kinds: [form, public_form, google_form]
+
+  - tool: forms.set_publish_settings
+    source_resource_fields: [form_id]
+    match_fields: [publish_as_template, require_authentication]
+    destination_kinds: [form, public_form, google_form, published_form]
+
+  - tool: forms.batch_update_form
+    payload_fields: [requests]
+    match_fields: [form_id]
+    destination_kinds: [form, public_form, google_form]
+
+  - tool: tasks.manage_task_list
+    payload_fields: [title]
+    match_fields: [action, task_list_id]
+    destination_kinds: [task_list, public_task_list]
+
+  - tool: tasks.manage_task
+    payload_fields: [title, notes]
+    match_fields: [action, task_list_id, task_id, destination_task_list]
+    destination_kinds: [task, public_task, task_list, public_task_list]
+
+  - tool: contacts.manage_contact
+    payload_fields:
+      - given_name
+      - family_name
+      - phones
+      - emails
+      - organizations
+      - notes
+      - address
+      - phone
+      - email
+      - organization
+      - job_title
+    match_fields: [action, contact_id]
+    destination_kinds: [contact, public_contact, contact_group, public_contact_group]
+
+  - tool: contacts.manage_contacts_batch
+    payload_fields: [contacts, updates, field]
+    match_fields: [action, contact_ids]
+    destination_kinds: [contact, public_contact, contact_group, public_contact_group]
+
+  - tool: contacts.manage_contact_group
+    payload_fields: [name, add_contact_ids]
+    match_fields: [action, group_id]
+    destination_kinds: [contact_group, public_contact_group]
+
+  - tool: apps_script.create_script_project
+    payload_fields: [title]
+    match_fields: [parent_id]
+    destination_kinds: [script_project, public_script_project, drive_folder, public_drive_folder]
+
+  - tool: apps_script.update_script_content
+    payload_fields: [files]
+    match_fields: [script_id]
+    destination_kinds: [script_project, public_script_project]
+
+  - tool: apps_script.run_script_function
+    payload_fields: [parameters]
+    match_fields: [script_id, function_name]
+    destination_kinds: [script_project, public_script_project, script_execution_log]
+
+  - tool: apps_script.manage_deployment
+    payload_fields: [description, version_description]
+    match_fields: [action, script_id, deployment_id]
+    destination_kinds: [script_project, public_script_project, script_deployment]

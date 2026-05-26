@@ -38,6 +38,7 @@ class RedTeamSubmissionHarness:
             _submission_scenario(kind),
             output_dir=output_dir,
             attempt=attempt,
+            run_name=f"{kind}-attempt-{attempt}",
         )
         self.mcp_servers = []
 

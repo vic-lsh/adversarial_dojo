@@ -44,6 +44,7 @@ class ExperimentConfig(StrictModel):
     benchmark: ExperimentBenchmark = Field(default_factory=ExperimentBenchmark)
     tool_interface: ToolInterface | None = None
     tool_interface_file: str | None = None
+    tool_interface_source_files: list[str] = Field(default_factory=list, exclude=True)
 
     @model_validator(mode="after")
     def validate_tool_interface_present(self) -> ExperimentConfig:
@@ -64,11 +65,17 @@ class ExperimentConfig(StrictModel):
             interface_path = Path(data["tool_interface_file"]).expanduser()
             if not interface_path.is_absolute():
                 interface_path = config_path.parent / interface_path
-            from adversarial_dojo.tool_interfaces import load_tool_interface_file
+            from adversarial_dojo.tool_interfaces import (
+                load_tool_interface_file,
+                tool_interface_source_files,
+            )
 
             data["tool_interface"] = load_tool_interface_file(interface_path).model_dump(
                 mode="json"
             )
+            data["tool_interface_source_files"] = [
+                str(source.resolve()) for source in tool_interface_source_files(interface_path)
+            ]
         benchmark = data.get("benchmark")
         guidance_file = None
         if isinstance(benchmark, dict):

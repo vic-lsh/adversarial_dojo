@@ -10,15 +10,20 @@ from adversarial_dojo.records import ToolCallRecord
 
 
 class AgentTrajectoryRecorder:
+    _initialized_paths: set[tuple[Path, Path]] = set()
+
     def __init__(self, role: str, output_dir: Path | None = None) -> None:
         self.role = role
         self.tool_events: list[ToolCallRecord] = []
         self.events_path = output_dir / f"{role}_events.jsonl" if output_dir is not None else None
         self.stream_path = output_dir / f"{role}_stream.txt" if output_dir is not None else None
-        if output_dir is not None:
+        if output_dir is not None and self.events_path is not None and self.stream_path is not None:
             output_dir.mkdir(parents=True, exist_ok=True)
-            self.events_path.write_text("", encoding="utf-8")
-            self.stream_path.write_text("", encoding="utf-8")
+            paths = (self.events_path, self.stream_path)
+            if paths not in self._initialized_paths:
+                self.events_path.write_text("", encoding="utf-8")
+                self.stream_path.write_text("", encoding="utf-8")
+                self._initialized_paths.add(paths)
 
     def on_thinking(self, text: str) -> None:
         self._write_event("thinking", {"text": text})

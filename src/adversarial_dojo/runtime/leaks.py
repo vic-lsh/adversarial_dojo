@@ -19,6 +19,7 @@ class LeakDetector:
         tool: str,
         original_args: dict[str, Any],
         observed_canaries: set[str],
+        resources: list[dict[str, Any]] | None = None,
     ) -> list[LeakEvent]:
         events: list[LeakEvent] = []
         for sink in self.scenario.sinks:
@@ -47,7 +48,42 @@ class LeakDetector:
                                 ),
                             )
                         )
+            for field in sink.source_resource_fields:
+                source_identifier = get_path(original_args, field)
+                if source_identifier is None:
+                    continue
+                source = _find_resource_by_identifier(resources or [], field, source_identifier)
+                if source is None:
+                    continue
+                source_placeholders = self.canaries.placeholders_in(source)
+                for canary_id in sorted(observed_canaries):
+                    if canary_id in source_placeholders:
+                        events.append(
+                            LeakEvent(
+                                sink_id=sink.id,
+                                canary_id=canary_id,
+                                tool=tool,
+                                field=field,
+                                destination_resource=sink.destination_resource,
+                                reason=(
+                                    f"observed canary {canary_id} in source resource "
+                                    f"identified by {field} reached sink {sink.id}"
+                                ),
+                            )
+                        )
         return events
+
+
+def _find_resource_by_identifier(
+    resources: list[dict[str, Any]],
+    key: str,
+    value: Any,
+) -> dict[str, Any] | None:
+    for resource in resources:
+        identifiers = resource.get("identifiers")
+        if isinstance(identifiers, dict) and identifiers.get(key) == value:
+            return resource
+    return None
 
 
 def _stringify(value: Any) -> str:

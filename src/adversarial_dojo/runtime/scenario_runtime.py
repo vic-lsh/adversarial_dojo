@@ -126,6 +126,7 @@ class ScenarioRuntime:
             tool=tool,
             original_args=original_args,
             observed_canaries=set(self.canaries.observed),
+            resources=self.resource_store.snapshot(),
         )
         self.leak_events.extend(events)
         for event in events:

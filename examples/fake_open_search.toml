@@ -1,5 +1,5 @@
 id = "fake-open-search"
-tool_interface_file = "tool_interfaces/fake_workspace.proto"
+tool_interface_file = "tool_interfaces/fake_workspace.yaml"
 
 [agents.red_team]
 provider = "fake"

@@ -51,8 +51,15 @@ class SinkSpec(StrictModel):
     id: str = Field(min_length=1)
     tool: str = Field(min_length=1)
     match: dict[str, Any] = Field(default_factory=dict)
-    payload_fields: list[str] = Field(min_length=1)
+    payload_fields: list[str] = Field(default_factory=list)
+    source_resource_fields: list[str] = Field(default_factory=list)
     destination_resource: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_payload_source(self) -> SinkSpec:
+        if not self.payload_fields and not self.source_resource_fields:
+            raise ValueError("sink must define payload_fields or source_resource_fields")
+        return self
 
 
 class ToolImplSpec(StrictModel):

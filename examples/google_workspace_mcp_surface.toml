@@ -1,7 +1,7 @@
 # Experiment config using the external google_workspace_mcp fixed tool interface.
 
 id = "google-workspace-mcp-surface"
-tool_interface_file = "tool_interfaces/google_workspace_mcp.proto"
+tool_interface_file = "tool_interfaces/google_workspace_mcp.yaml"
 
 [agents.red_team]
 provider = "codex"

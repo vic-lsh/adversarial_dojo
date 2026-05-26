@@ -1,19 +1,23 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+import signal
+import threading
 from typing import Any, Callable
 
 from adversarial_dojo.agents.prompts import (
     analysis_prompt,
-    recover_yaml_from_stream,
     scenario_generation_prompt,
     user_task_generation_prompt,
 )
 from adversarial_dojo.agents.trajectories import AgentTrajectoryRecorder
+from adversarial_dojo.agents.constants import AGENT_TURN_TIMEOUT_SECONDS
 from adversarial_dojo.agents.utils import (
     generate_in_session,
     make_coding_agent,
+    prepare_agent_workspace,
     prepare_victim_workspace,
     victim_sandbox_config,
 )
@@ -61,6 +65,7 @@ class AgentshimRunner:
             final_text = agent.generate(
                 scenario.task.user_task,
                 cwd=str(victim_cwd),
+                timeout=AGENT_TURN_TIMEOUT_SECONDS,
                 silent=True,
             )
             calls = harness.collect_calls()
@@ -86,6 +91,13 @@ class AgentshimRunner:
     ) -> str:
         from agentshim import CodingAgent
 
+        workspace = prepare_agent_workspace(
+            role="red_team",
+            config=config,
+            attempt=attempt,
+            output_dir=output_dir,
+            previous_attempts=previous_attempts,
+        )
         prompt = scenario_generation_prompt(
             config,
             attempt,
@@ -93,24 +105,20 @@ class AgentshimRunner:
             user_task=user_task.user_task,
             repair_error=repair_error,
             output_dir=output_dir,
+            previous_attempts_workspace="previous_attempts",
         )
         event_recorder = AgentTrajectoryRecorder("red_team", output_dir)
-        try:
-            return generate_red_team_submission(
-                CodingAgent,
-                self.config,
-                prompt=prompt,
-                kind="scenario",
-                attempt=attempt,
-                output_dir=output_dir,
-                event_recorder=event_recorder,
-                validator=lambda text: scenario_validation_error_text(text, config),
-            )
-        except Exception:
-            recovered = recover_yaml_from_stream(output_dir, "red_team")
-            if recovered is not None:
-                return recovered
-            raise
+        return generate_red_team_submission(
+            CodingAgent,
+            self.config,
+            prompt=prompt,
+            kind="scenario",
+            attempt=attempt,
+            output_dir=output_dir,
+            event_recorder=event_recorder,
+            validator=lambda text: scenario_validation_error_text(text, config),
+            cwd=workspace,
+        )
 
     def propose_user_task(
         self,
@@ -120,24 +128,25 @@ class AgentshimRunner:
     ) -> str:
         from agentshim import CodingAgent
 
+        workspace = prepare_agent_workspace(
+            role="user_task",
+            config=config,
+            attempt=attempt,
+            output_dir=output_dir,
+        )
         prompt = user_task_generation_prompt(config, attempt)
         event_recorder = AgentTrajectoryRecorder("user_task", output_dir)
-        try:
-            return generate_red_team_submission(
-                CodingAgent,
-                self.config,
-                prompt=prompt,
-                kind="user_task",
-                attempt=attempt,
-                output_dir=output_dir,
-                event_recorder=event_recorder,
-                validator=user_task_validation_error_text,
-            )
-        except Exception:
-            recovered = recover_yaml_from_stream(output_dir, "user_task")
-            if recovered is not None:
-                return recovered
-            raise
+        return generate_red_team_submission(
+            CodingAgent,
+            self.config,
+            prompt=prompt,
+            kind="user_task",
+            attempt=attempt,
+            output_dir=output_dir,
+            event_recorder=event_recorder,
+            validator=user_task_validation_error_text,
+            cwd=workspace,
+        )
 
     def analyze_attempt(
         self,
@@ -150,12 +159,20 @@ class AgentshimRunner:
     ) -> AttemptAnalysis:
         from agentshim import CodingAgent
 
+        workspace = prepare_agent_workspace(
+            role="analyzer",
+            config=config,
+            attempt=attempt,
+            output_dir=output_dir,
+            attempt_dir=attempt_dir,
+        )
         prompt = analysis_prompt(
             config=config,
             scenario=scenario,
             record=record,
             attempt=attempt,
             attempt_dir=attempt_dir,
+            workspace_attempt_path="current_attempt",
         )
         event_recorder = AgentTrajectoryRecorder("analyzer", output_dir)
         raw = generate_red_team_submission(
@@ -166,6 +183,7 @@ class AgentshimRunner:
             attempt=attempt,
             output_dir=output_dir,
             event_recorder=event_recorder,
+            cwd=workspace,
         )
         from adversarial_dojo.records import parse_attempt_analysis
 
@@ -183,6 +201,8 @@ def generate_red_team_submission(
     event_recorder: AgentTrajectoryRecorder,
     validator: Callable[[str], str | None] | None = None,
     max_validation_rounds: int = 3,
+    cwd: Path | str = ".",
+    turn_timeout_seconds: float = AGENT_TURN_TIMEOUT_SECONDS,
 ) -> str:
     with RedTeamSubmissionHarness(kind, output_dir=output_dir, attempt=attempt) as harness:
         agent = make_coding_agent(
@@ -197,7 +217,13 @@ def generate_red_team_submission(
         for round_index in range(max_validation_rounds + 1):
             call_start = harness.call_count()
             event_start = len(event_recorder.tool_events)
-            final_text = generate_in_session(agent, next_prompt)
+            with _agent_turn_time_limit(turn_timeout_seconds):
+                final_text = generate_in_session(
+                    agent,
+                    next_prompt,
+                    cwd=cwd,
+                    timeout_seconds=turn_timeout_seconds,
+                )
             submission = harness.collect_submission_since(
                 call_start=call_start,
                 extra_call_start=event_start,
@@ -212,7 +238,7 @@ def generate_red_team_submission(
                     missing_submission_prompt(kind),
                 )
                 if round_index >= max_validation_rounds:
-                    return final_text
+                    raise RuntimeError(missing_submission_prompt(kind))
                 next_prompt = missing_submission_prompt(kind)
                 continue
 
@@ -227,6 +253,26 @@ def generate_red_team_submission(
                 return last_submission_text
             next_prompt = validation_failure_prompt(kind, validation_error)
         return last_submission_text or final_text
+
+
+@contextmanager
+def _agent_turn_time_limit(seconds: float):
+    if seconds <= 0 or threading.current_thread() is not threading.main_thread():
+        yield
+        return
+
+    def handle_timeout(signum: int, frame) -> None:
+        del signum, frame
+        raise TimeoutError(f"agent turn exceeded {seconds:.1f}s timeout")
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    signal.signal(signal.SIGALRM, handle_timeout)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
 
 
 def missing_submission_prompt(kind: SubmissionKind) -> str:

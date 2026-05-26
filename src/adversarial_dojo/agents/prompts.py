@@ -22,8 +22,13 @@ def scenario_generation_prompt(
     user_task: str,
     repair_error: str | None = None,
     output_dir: Path | None = None,
+    previous_attempts_workspace: str | None = None,
 ) -> str:
-    previous = previous_attempt_refs(previous_attempts, output_dir)
+    previous = previous_attempt_refs(
+        previous_attempts,
+        output_dir,
+        workspace_path=previous_attempts_workspace,
+    )
     state = {
         "experiment_config": config.model_dump(mode="json"),
         "attempt": attempt,
@@ -68,10 +73,11 @@ def analysis_prompt(
     record: AttemptRecord,
     attempt: int,
     attempt_dir: Path,
+    workspace_attempt_path: str | None = None,
 ) -> str:
     state = {
         "attempt": attempt,
-        "attempt_path": str(attempt_dir),
+        "attempt_path": workspace_attempt_path or str(attempt_dir),
         "original_attack_intent": scenario.task.red_team_task if scenario is not None else None,
         "user_task": scenario.task.user_task if scenario is not None else record.victim_prompt,
         "success": record.success,
@@ -101,7 +107,12 @@ def security_research_preamble() -> str:
     )
 
 
-def previous_attempt_refs(previous_attempts: list[Any], output_dir: Path | None = None) -> dict[str, Any]:
+def previous_attempt_refs(
+    previous_attempts: list[Any],
+    output_dir: Path | None = None,
+    *,
+    workspace_path: str | None = None,
+) -> dict[str, Any]:
     run_dir = output_dir.parent if output_dir is not None else None
     total_attempts = len(previous_attempts)
     if total_attempts == 0:
@@ -109,11 +120,14 @@ def previous_attempt_refs(previous_attempts: list[Any], output_dir: Path | None 
             "total_attempts": 0,
             "note": "No previous attempts have been run.",
         }
-    artifact_note = (
-        "Per-attempt artifact paths are unavailable because this run has no output directory."
-        if run_dir is None
-        else f"Previous attempts are stored under {run_dir}/attempt-NNN."
-    )
+    if workspace_path is not None:
+        artifact_note = f"Previous attempts are available in this workspace under {workspace_path}."
+    else:
+        artifact_note = (
+            "Per-attempt artifact paths are unavailable because this run has no output directory."
+            if run_dir is None
+            else f"Previous attempts are stored under {run_dir}/attempt-NNN."
+        )
     return {
         "total_attempts": total_attempts,
         "recent_analyses": recent_attempt_analyses(previous_attempts),

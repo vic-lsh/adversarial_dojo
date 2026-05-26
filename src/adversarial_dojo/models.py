@@ -34,6 +34,7 @@ from adversarial_dojo.scenario import (
     parse_scenario_proposal,
 )
 from adversarial_dojo.tool_interfaces.models import (
+    SinkCapability,
     ToolInterface,
     ToolServerSpec,
     ToolSpec,
@@ -58,6 +59,7 @@ __all__ = [
     "ScenarioAgents",
     "ScenarioProposal",
     "SinkSpec",
+    "SinkCapability",
     "StrictModel",
     "TaskSpec",
     "ToolCallRecord",

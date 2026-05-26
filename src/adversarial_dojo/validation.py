@@ -141,6 +141,7 @@ def validate_scenario_proposal(
                 suggestion="Use only sink tools from the fixed ToolInterface.",
             )
             continue
+        _validate_sink_capability(report, sink, proposal, config, path)
         if sink.tool not in impls_by_tool:
             report.add(
                 "MISSING_SINK_TOOL_IMPL",
@@ -274,6 +275,96 @@ def _validate_sink_schema_fields(
                 f"sink payload field {field!r} is not in {sink.tool}'s argument schema",
                 suggestion="Use a real payload argument field for this tool.",
             )
+    for index, field in enumerate(sink.source_resource_fields):
+        if not _schema_allows_path(tool.args_schema, field):
+            report.add(
+                "SINK_SOURCE_RESOURCE_FIELD_NOT_IN_SCHEMA",
+                f"{path}.source_resource_fields[{index}]",
+                f"sink source resource field {field!r} is not in {sink.tool}'s argument schema",
+                suggestion="Use a real resource identifier argument field for this tool.",
+            )
+
+
+def _validate_sink_capability(
+    report: ScenarioValidationReport,
+    sink,
+    proposal: ScenarioProposal,
+    config: ExperimentConfig,
+    path: str,
+) -> None:
+    assert config.tool_interface is not None
+    capability = config.tool_interface.find_sink_capability(sink.tool)
+    if capability is None:
+        report.add(
+            "SINK_TOOL_NOT_ELIGIBLE",
+            f"{path}.tool",
+            f"tool {sink.tool} is not configured as a sink-capable tool",
+            suggestion=(
+                "Use only sink-capable tools from the fixed ToolInterface "
+                "sink_capabilities metadata."
+            ),
+        )
+        return
+    allowed_payload_fields = set(capability.payload_fields)
+    for index, field in enumerate(sink.payload_fields):
+        if field not in allowed_payload_fields:
+            report.add(
+                "SINK_PAYLOAD_FIELD_NOT_ALLOWED",
+                f"{path}.payload_fields[{index}]",
+                f"payload field {field!r} is not allowed for sink tool {sink.tool}",
+                suggestion=(
+                    "Use one of the configured payload fields: "
+                    + ", ".join(capability.payload_fields)
+                ),
+            )
+    allowed_source_resource_fields = set(capability.source_resource_fields)
+    for index, field in enumerate(sink.source_resource_fields):
+        if field not in allowed_source_resource_fields:
+            report.add(
+                "SINK_SOURCE_RESOURCE_FIELD_NOT_ALLOWED",
+                f"{path}.source_resource_fields[{index}]",
+                (
+                    f"source resource field {field!r} is not allowed for "
+                    f"sink tool {sink.tool}"
+                ),
+                suggestion=(
+                    "Use one of the configured source resource fields: "
+                    + ", ".join(capability.source_resource_fields)
+                ),
+            )
+    allowed_match_fields = set(capability.match_fields)
+    for key in sink.match:
+        if key not in allowed_match_fields:
+            report.add(
+                "SINK_MATCH_FIELD_NOT_ALLOWED",
+                f"{path}.match.{key}",
+                f"match field {key!r} is not allowed for sink tool {sink.tool}",
+                suggestion=(
+                    "Use only configured match fields"
+                    + (
+                        ": " + ", ".join(capability.match_fields)
+                        if capability.match_fields
+                        else "; this sink tool does not allow match fields"
+                    )
+                ),
+            )
+    resources = {resource.id: resource for resource in proposal.resources}
+    destination = resources.get(sink.destination_resource)
+    if destination is None:
+        return
+    if destination.kind not in set(capability.destination_kinds):
+        report.add(
+            "SINK_DESTINATION_KIND_INCOMPATIBLE",
+            f"{path}.destination_resource",
+            (
+                f"sink destination resource {destination.id} has kind "
+                f"{destination.kind!r}, which is not compatible with {sink.tool}"
+            ),
+            suggestion=(
+                "Use a destination resource kind configured for this sink tool: "
+                + ", ".join(capability.destination_kinds)
+            ),
+        )
 
 
 def _validate_tool_impl_schema_usage(

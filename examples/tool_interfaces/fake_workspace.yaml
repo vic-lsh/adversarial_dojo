@@ -1,0 +1,12 @@
+proto: fake_workspace.proto
+
+sink_capabilities:
+  - tool: email.send_email
+    payload_fields:
+      - body
+      - subject
+    match_fields:
+      - to
+    destination_kinds:
+      - inbox
+      - email_inbox

@@ -10,10 +10,17 @@ from adversarial_dojo.scenario import Scenario
 
 
 class ResourceMcpHarness:
-    def __init__(self, scenario: Scenario, output_dir: Path | None, attempt: int) -> None:
+    def __init__(
+        self,
+        scenario: Scenario,
+        output_dir: Path | None,
+        attempt: int,
+        run_name: str | None = None,
+    ) -> None:
         self.scenario = scenario
         self.output_dir = output_dir
         self.attempt = attempt
+        self.run_name = run_name or f"attempt-{attempt}"
         self._tmp: tempfile.TemporaryDirectory[str] | None = None
         self._root: Path | None = None
         self._call_logs: list[Path] = []
@@ -25,7 +32,7 @@ class ResourceMcpHarness:
         from agentshim import StdioMcpServer
 
         if self.output_dir is not None:
-            root = self.output_dir / "mcp" / f"attempt-{self.attempt}"
+            root = self.output_dir / "mcp" / self.run_name
             root.mkdir(parents=True, exist_ok=True)
             root = root.resolve()
         else:

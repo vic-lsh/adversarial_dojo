@@ -3,6 +3,7 @@ from __future__ import annotations
 from adversarial_dojo.config import AgentConfig, ExperimentConfig, ScenarioAgents
 from adversarial_dojo.scenario import ScenarioProposal
 from adversarial_dojo.tool_interfaces.models import (
+    SinkCapability,
     ToolInterface,
     ToolServerSpec,
     ToolSpec,
@@ -122,6 +123,117 @@ def test_validation_reports_google_workspace_read_aliases() -> None:
     ]
 
 
+def test_validation_rejects_non_sink_capable_tool() -> None:
+    data = valid_proposal_data()
+    data["sinks"][0]["tool"] = "docs.read_note"
+    data["sinks"][0]["payload_fields"] = ["id"]
+    proposal = ScenarioProposal.model_validate(data)
+
+    report = validate_scenario_proposal(proposal, simple_config())
+
+    assert "SINK_TOOL_NOT_ELIGIBLE" in {issue.code for issue in report.issues}
+
+
+def test_validation_rejects_unconfigured_sink_payload_field() -> None:
+    data = valid_proposal_data()
+    data["sinks"][0]["payload_fields"] = ["to"]
+    proposal = ScenarioProposal.model_validate(data)
+
+    report = validate_scenario_proposal(proposal, simple_config())
+
+    assert "SINK_PAYLOAD_FIELD_NOT_ALLOWED" in {issue.code for issue in report.issues}
+
+
+def test_validation_rejects_unconfigured_sink_match_field() -> None:
+    data = valid_proposal_data()
+    data["sinks"][0]["match"] = {"cc": "attacker@example.com"}
+    proposal = ScenarioProposal.model_validate(data)
+
+    report = validate_scenario_proposal(proposal, simple_config())
+
+    assert "SINK_MATCH_FIELD_NOT_ALLOWED" in {issue.code for issue in report.issues}
+
+
+def test_validation_rejects_incompatible_sink_destination_kind() -> None:
+    data = valid_proposal_data()
+    data["resources"][1]["kind"] = "public_search_log"
+    proposal = ScenarioProposal.model_validate(data)
+
+    report = validate_scenario_proposal(proposal, simple_config())
+
+    assert "SINK_DESTINATION_KIND_INCOMPATIBLE" in {
+        issue.code for issue in report.issues
+    }
+
+
+def test_validation_accepts_source_resource_sink_field() -> None:
+    data = valid_proposal_data()
+    data["resources"].append(
+        {
+            "id": "public_shared_file",
+            "kind": "public_drive_file",
+            "content": [],
+            "identifiers": {"file_id": "public-launch-file"},
+            "access": {"readers": ["public"], "writers": ["victim"]},
+        }
+    )
+    data["sinks"] = [
+        {
+            "id": "public_file_share",
+            "tool": "drive.share_file",
+            "match": {"visibility": "public"},
+            "source_resource_fields": ["file_id"],
+            "destination_resource": "public_shared_file",
+        }
+    ]
+    data["tool_impls"].append(
+        {
+            "tool": "drive.share_file",
+            "body": "return ToolResult(content='shared')",
+        }
+    )
+    proposal = ScenarioProposal.model_validate(data)
+
+    report = validate_scenario_proposal(proposal, simple_config())
+
+    assert report.ok
+
+
+def test_validation_rejects_unconfigured_sink_source_resource_field() -> None:
+    data = valid_proposal_data()
+    data["resources"].append(
+        {
+            "id": "public_shared_file",
+            "kind": "public_drive_file",
+            "content": [],
+            "identifiers": {"file_id": "public-launch-file"},
+            "access": {"readers": ["public"], "writers": ["victim"]},
+        }
+    )
+    data["sinks"] = [
+        {
+            "id": "public_file_share",
+            "tool": "drive.share_file",
+            "match": {"visibility": "public"},
+            "source_resource_fields": ["visibility"],
+            "destination_resource": "public_shared_file",
+        }
+    ]
+    data["tool_impls"].append(
+        {
+            "tool": "drive.share_file",
+            "body": "return ToolResult(content='shared')",
+        }
+    )
+    proposal = ScenarioProposal.model_validate(data)
+
+    report = validate_scenario_proposal(proposal, simple_config())
+
+    assert "SINK_SOURCE_RESOURCE_FIELD_NOT_ALLOWED" in {
+        issue.code for issue in report.issues
+    }
+
+
 def google_workspace_alias_config() -> ExperimentConfig:
     return ExperimentConfig(
         id="google",
@@ -182,6 +294,14 @@ def google_workspace_alias_config() -> ExperimentConfig:
                         )
                     ],
                 ),
-            ]
+            ],
+            sink_capabilities=[
+                SinkCapability(
+                    tool="search.search_custom",
+                    payload_fields=["q"],
+                    match_fields=[],
+                    destination_kinds=["search_log"],
+                )
+            ],
         ),
     )

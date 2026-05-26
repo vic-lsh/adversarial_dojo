@@ -111,6 +111,7 @@ def apply_config_overrides(
     if not overrides:
         return config
     data = config.model_dump(mode="json")
+    data["tool_interface_source_files"] = list(config.tool_interface_source_files)
     _override_agent(data["agents"]["red_team"], overrides, "red_team")
     _override_agent(data["agents"]["victim"], overrides, "victim")
     analyzer_provider = overrides.get("analyzer_provider")

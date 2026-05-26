@@ -44,8 +44,25 @@ class ToolServerSpec(StrictModel):
         return self
 
 
+class SinkCapability(StrictModel):
+    tool: str = Field(min_length=1)
+    payload_fields: list[str] = Field(default_factory=list)
+    source_resource_fields: list[str] = Field(default_factory=list)
+    match_fields: list[str] = Field(default_factory=list)
+    destination_kinds: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_payload_source(self) -> SinkCapability:
+        if not self.payload_fields and not self.source_resource_fields:
+            raise ValueError(
+                "sink capability must define payload_fields or source_resource_fields"
+            )
+        return self
+
+
 class ToolInterface(StrictModel):
     servers: list[ToolServerSpec] = Field(default_factory=list)
+    sink_capabilities: list[SinkCapability] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_unique_servers(self) -> ToolInterface:
@@ -56,6 +73,21 @@ class ToolInterface(StrictModel):
         if duplicate_servers:
             raise ValueError(
                 f"duplicate tool interface servers: {', '.join(duplicate_servers)}"
+            )
+        known_tools = self.qualified_tool_names
+        capability_tools = [capability.tool for capability in self.sink_capabilities]
+        duplicate_capabilities = sorted(
+            {tool for tool in capability_tools if capability_tools.count(tool) > 1}
+        )
+        if duplicate_capabilities:
+            raise ValueError(
+                "duplicate sink capabilities: " + ", ".join(duplicate_capabilities)
+            )
+        unknown_capabilities = sorted(set(capability_tools) - known_tools)
+        if unknown_capabilities:
+            raise ValueError(
+                "sink capabilities reference unknown tools: "
+                + ", ".join(unknown_capabilities)
             )
         return self
 
@@ -76,6 +108,12 @@ class ToolInterface(StrictModel):
                 if tool.name == tool_name:
                     return server, tool
         raise KeyError(f"unknown tool: {qualified_tool_name}")
+
+    def find_sink_capability(self, qualified_tool_name: str) -> SinkCapability | None:
+        for capability in self.sink_capabilities:
+            if capability.tool == qualified_tool_name:
+                return capability
+        return None
 
     def find_server(self, server_name: str) -> ToolServerSpec:
         for server in self.servers:
