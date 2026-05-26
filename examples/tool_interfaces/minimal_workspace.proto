@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package adversarial_dojo.minimal_workspace;
+
+service Docs {
+  rpc ReadNote(ReadNoteRequest) returns (ToolTextResponse);
+}
+
+service Email {
+  rpc SendEmail(SendEmailRequest) returns (ToolTextResponse);
+}
+
+message ToolTextResponse {
+  string result = 1;
+}
+
+message ReadNoteRequest {
+  string id = 1;
+}
+
+message SendEmailRequest {
+  string to = 1;
+  optional string subject = 2;
+  string body = 3;
+}

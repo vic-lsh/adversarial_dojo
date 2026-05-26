@@ -17,6 +17,10 @@ reasoning_effort = "medium"
 provider = "claude"
 model = "haiku"
 
+[agents.analyzer]
+provider = "claude"
+model = "haiku"
+
 [benchmark]
 max_attempts = 5
 victim_profile = """
