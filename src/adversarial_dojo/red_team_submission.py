@@ -5,23 +5,26 @@ from typing import Any, Literal
 
 import yaml
 
-from adversarial_dojo.mcp_harness import MockMcpHarness
-from adversarial_dojo.models import (
-    AttackPatch,
-    AttackScenarioProposal,
-    AttemptAnalysis,
-    MockEnvironment,
-    MockMcpServer,
-    MockTool,
-    ToolCallRecord,
+from adversarial_dojo.config import ScenarioAgents
+from adversarial_dojo.records import AttemptAnalysis, ToolCallRecord
+from adversarial_dojo.scenario import (
+    Scenario,
+    ScenarioProposal,
+    TaskSpec,
+    ToolImplSpec,
 )
+from adversarial_dojo.tool_interfaces.models import (
+    ToolInterface,
+    ToolServerSpec,
+    ToolSpec,
+)
+from adversarial_dojo.resource_mcp_harness import ResourceMcpHarness
 
 SUBMISSION_SERVER_NAME = "adversarial_dojo_submission"
-SUBMIT_SCENARIO_TOOL = "submit_attack_scenario"
-SUBMIT_PATCH_TOOL = "submit_attack_patch"
+SUBMIT_SCENARIO_TOOL = "submit_scenario_proposal"
 SUBMIT_ANALYSIS_TOOL = "submit_attempt_analysis"
 
-SubmissionKind = Literal["scenario", "patch", "analysis"]
+SubmissionKind = Literal["scenario", "analysis"]
 
 
 class RedTeamSubmissionHarness:
@@ -29,7 +32,11 @@ class RedTeamSubmissionHarness:
         self.kind = kind
         self.output_dir = output_dir
         self.attempt = attempt
-        self._harness = MockMcpHarness(_submission_environment(kind), output_dir=output_dir, attempt=attempt)
+        self._harness = ResourceMcpHarness(
+            _submission_scenario(kind),
+            output_dir=output_dir,
+            attempt=attempt,
+        )
         self.mcp_servers = []
 
     def __enter__(self) -> RedTeamSubmissionHarness:
@@ -41,15 +48,32 @@ class RedTeamSubmissionHarness:
         self._harness.__exit__(exc_type, exc, tb)
 
     def collect_submission(self, extra_calls: list[ToolCallRecord] | None = None) -> dict[str, Any] | None:
-        return extract_submission(self._harness.collect_calls() + list(extra_calls or []), self.kind)
+        return extract_submission(
+            self._harness.collect_calls() + list(extra_calls or []),
+            self.kind,
+        )
+
+    def collect_submission_since(
+        self,
+        *,
+        call_start: int = 0,
+        extra_call_start: int = 0,
+        extra_calls: list[ToolCallRecord] | None = None,
+    ) -> dict[str, Any] | None:
+        return extract_submission(
+            self._harness.collect_calls()[call_start:]
+            + list(extra_calls or [])[extra_call_start:],
+            self.kind,
+        )
+
+    def call_count(self) -> int:
+        return len(self._harness.collect_calls())
 
 
 def extract_submission(calls: list[ToolCallRecord], kind: SubmissionKind) -> dict[str, Any] | None:
-    tool_name = _tool_name(kind)
+    tool_name = f"{SUBMISSION_SERVER_NAME}.{_tool_name(kind)}"
     for call in reversed(calls):
-        if call.server_name != SUBMISSION_SERVER_NAME:
-            continue
-        if call.tool_name != tool_name:
+        if call.tool != tool_name:
             continue
         return call.arguments
     return None
@@ -63,37 +87,45 @@ def submission_tool_name(kind: SubmissionKind) -> str:
     return f"{SUBMISSION_SERVER_NAME}.{_tool_name(kind)}"
 
 
-def _submission_environment(kind: SubmissionKind) -> MockEnvironment:
-    tool_name = _tool_name(kind)
+def _submission_scenario(kind: SubmissionKind) -> Scenario:
     if kind == "scenario":
-        model = AttackScenarioProposal
-        description = "Submit the complete AttackScenarioProposal object. This is the only accepted way to return a candidate scenario proposal."
-    elif kind == "patch":
-        model = AttackPatch
-        description = "Submit the complete AttackPatch object. This is the only accepted way to return a patch proposal."
+        model = ScenarioProposal
+        description = "Submit the complete ScenarioProposal object."
     else:
         model = AttemptAnalysis
-        description = "Submit the complete AttemptAnalysis object. This is the only accepted way to return structured post-attempt analysis."
-    return MockEnvironment(
-        mcp_servers=[
-            MockMcpServer(
-                name=SUBMISSION_SERVER_NAME,
-                tools=[
-                    MockTool(
-                        name=tool_name,
-                        description=description,
-                        args_schema=model.model_json_schema(),
-                        responses=[{"content": "submission accepted"}],
-                    )
-                ],
+        description = "Submit the complete AttemptAnalysis object."
+    tool_name = _tool_name(kind)
+    return Scenario(
+        id=f"submission-{kind}",
+        agents=ScenarioAgents(),
+        task=TaskSpec(user_task="Submit structured data.", red_team_task="Submit structured data."),
+        resources=[],
+        canaries=[],
+        sinks=[],
+        tool_interface=ToolInterface(
+            servers=[
+                ToolServerSpec(
+                    name=SUBMISSION_SERVER_NAME,
+                    tools=[
+                        ToolSpec(
+                            name=tool_name,
+                            description=description,
+                            args_schema=model.model_json_schema(),
+                        )
+                    ],
+                )
+            ]
+        ),
+        tool_impls=[
+            ToolImplSpec(
+                tool=f"{SUBMISSION_SERVER_NAME}.{tool_name}",
+                body='return ToolResult(content="submission accepted")',
             )
-        ]
+        ],
     )
 
 
 def _tool_name(kind: SubmissionKind) -> str:
     if kind == "scenario":
         return SUBMIT_SCENARIO_TOOL
-    if kind == "patch":
-        return SUBMIT_PATCH_TOOL
     return SUBMIT_ANALYSIS_TOOL

@@ -2,28 +2,21 @@ from __future__ import annotations
 
 import json
 import sys
-from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from pydantic import ValidationError
 
 from adversarial_dojo.agents import AGENT_CRASH_RETRIES, make_runner
-from adversarial_dojo.artifacts import AttackSearchRecorder, SearchArtifactStore
-from adversarial_dojo.models import (
-    AgentConfig,
-    AttackScenario,
-    AttackScenarioProposal,
+from adversarial_dojo.config import AgentConfig, ExperimentConfig
+from adversarial_dojo.records import (
     AttemptAnalysis,
     AttemptRecord,
     BenchmarkResult,
-    ExperimentConfig,
-    MockEnvironment,
-    MockMcpServer,
-    MockTool,
-    parse_attack_scenario_proposal,
 )
-from adversarial_dojo.evaluators import all_evaluators_passed, run_evaluators
-from adversarial_dojo.secrets import materialize_runtime_secrets
+from adversarial_dojo.scenario import Scenario, ScenarioProposal, parse_scenario_proposal
+from adversarial_dojo.runtime.tool_impl import ToolImplExecutor
+from adversarial_dojo.validation import build_scenario_from_validated_proposal
 
 
 def run_attack_search(
@@ -31,237 +24,79 @@ def run_attack_search(
     output_dir: str | Path | None = None,
     resume: bool = False,
 ) -> BenchmarkResult:
-    artifact_store = SearchArtifactStore.open(config, output_dir, resume=resume)
-    attempts = artifact_store.load_attempts() if resume else []
-    recorder = AttackSearchRecorder(attempts=attempts, artifact_store=artifact_store)
+    out_path = Path(output_dir) if output_dir is not None else None
+    if out_path is not None:
+        out_path.mkdir(parents=True, exist_ok=True)
+        attempts_path = out_path / "attempts.jsonl"
+        if not resume or not attempts_path.exists():
+            attempts_path.write_text("", encoding="utf-8")
+        _write_json(out_path, "config.json", config.model_dump(mode="json"))
+    else:
+        attempts_path = None
+
+    attempts = _load_attempts(attempts_path) if resume else []
     winning_attempt: int | None = next(
-        (attempt.attempt for attempt in recorder.attempts if attempt.success), None
-    )
-    start_attempt = (
-        max((attempt.attempt for attempt in recorder.attempts), default=0) + 1
+        (attempt.attempt for attempt in attempts if attempt.success),
+        None,
     )
     analyzer_config = _resolve_analyzer_config(config)
+    start_attempt = max((attempt.attempt for attempt in attempts), default=0) + 1
 
     for attempt_number in range(start_attempt, config.benchmark.max_attempts + 1):
         if winning_attempt is not None:
             break
+        attempt_dir = _attempt_dir(out_path, attempt_number)
         red_team = make_runner("red_team", config.agents.red_team)
         analyzer = make_runner("analyzer", analyzer_config)
 
-        scenario, scenario_error, should_analyze_failure = _generate_prepared_scenario(
-            red_team=red_team,
-            config=config,
-            attempt_number=attempt_number,
-            attempts=recorder.attempts,
-            artifact_store=artifact_store,
-        )
-        if scenario is None:
-            record = AttemptRecord(attempt=attempt_number, patch_error=scenario_error)
-            recorder.record(
-                scenario=None,
-                record=record,
-                attempt_number=attempt_number,
-                analysis_callback=_analysis_callback(
-                    analyzer=analyzer,
-                    config=config,
-                    scenario=None,
-                    record=record,
-                    attempt_number=attempt_number,
-                    attempt_dir=artifact_store.attempt_dir(attempt_number),
-                )
-                if should_analyze_failure
-                else None,
-            )
-            continue
-
-        rendered_scenario, record = _run_generated_scenario(
-            scenario=scenario,
-            attempt_number=attempt_number,
-            artifact_store=artifact_store,
-        )
-        recorder.record(
-            scenario=rendered_scenario,
-            record=record,
-            attempt_number=attempt_number,
-            analysis_callback=_analysis_callback(
-                analyzer=analyzer,
-                config=config,
-                scenario=rendered_scenario,
-                record=record,
-                attempt_number=attempt_number,
-                attempt_dir=artifact_store.attempt_dir(attempt_number),
-            ),
-        )
-        if record.success:
-            winning_attempt = attempt_number
-            break
-
-    result = _build_attack_search_result(
-        config, recorder.attempts, winning_attempt, artifact_store.root
-    )
-    artifact_store.write_summary(result)
-    return result
-
-
-def _analysis_callback(
-    *,
-    analyzer,
-    config: ExperimentConfig,
-    scenario: AttackScenario | None,
-    record: AttemptRecord,
-    attempt_number: int,
-    attempt_dir: Path | None,
-) -> Callable[[], None]:
-    return lambda: _attach_attempt_analysis(
-        analyzer=analyzer,
-        config=config,
-        scenario=scenario,
-        record=record,
-        attempt_number=attempt_number,
-        attempt_dir=attempt_dir,
-    )
-
-
-def _resolve_analyzer_config(config: ExperimentConfig) -> AgentConfig:
-    if config.agents.analyzer is not None:
-        return config.agents.analyzer
-    analyzer_config = config.agents.red_team
-    print(
-        "warning: analyzer agent not configured; inheriting red_team config "
-        f"(provider={analyzer_config.provider}, model={analyzer_config.model}) "
-        "-- consider setting [agents.analyzer] to a cheaper model",
-        file=sys.stderr,
-    )
-    return analyzer_config
-
-
-def _generate_prepared_scenario(
-    *,
-    red_team,
-    config: ExperimentConfig,
-    attempt_number: int,
-    attempts: list[AttemptRecord],
-    artifact_store: SearchArtifactStore,
-) -> tuple[AttackScenario | None, str | None, bool]:
-    try:
-        raw_scenario = _with_agent_crash_retries(
-            lambda: red_team.propose_scenario(
-                config,
-                attempt_number,
-                attempts,
-                output_dir=artifact_store.attempt_dir(attempt_number),
-            )
-        )
-    except RuntimeError as exc:
-        return None, f"red team agent crashed: {exc}", False
-
-    artifact_store.write_raw_scenario(attempt_number, raw_scenario)
-    try:
-        return (
-            _prepare_generated_scenario(
-                parse_attack_scenario_proposal(raw_scenario),
-                config,
-                attempt_number=attempt_number,
-            ),
-            None,
-            True,
-        )
-    except (KeyError, ValueError, ValidationError) as exc:
-        return _repair_generated_scenario(
+        scenario, proposal, error, should_analyze = _generate_scenario(
             red_team=red_team,
             config=config,
             attempt_number=attempt_number,
             attempts=attempts,
-            artifact_store=artifact_store,
-            repair_error=str(exc),
+            attempt_dir=attempt_dir,
         )
-
-
-def _repair_generated_scenario(
-    *,
-    red_team,
-    config: ExperimentConfig,
-    attempt_number: int,
-    attempts: list[AttemptRecord],
-    artifact_store: SearchArtifactStore,
-    repair_error: str,
-) -> tuple[AttackScenario | None, str | None, bool]:
-    scenario_error = None
-    try:
-        repaired = _with_agent_crash_retries(
-            lambda: red_team.propose_scenario(
-                config,
-                attempt_number,
-                attempts,
-                repair_error=repair_error,
-                output_dir=artifact_store.attempt_dir(attempt_number),
+        if scenario is None:
+            record = AttemptRecord(
+                attempt=attempt_number,
+                proposal=proposal.model_dump(mode="json") if proposal else None,
+                error=error,
             )
-        )
-    except RuntimeError as crash_exc:
-        scenario_error = f"red team agent repair crashed: {crash_exc}"
-        repaired = ""
-    artifact_store.write_repair_scenario(attempt_number, repaired)
-    if repaired:
-        try:
-            scenario = _prepare_generated_scenario(
-                parse_attack_scenario_proposal(repaired),
-                config,
+            _attach_analysis(
+                analyzer=analyzer,
+                config=config,
+                scenario=None,
+                record=record,
                 attempt_number=attempt_number,
-            )
-            return scenario, None, True
-        except (KeyError, ValueError, ValidationError) as repair_exc:
-            scenario_error = str(repair_exc)
-    return None, scenario_error, True
+                attempt_dir=attempt_dir,
+            ) if should_analyze else None
+            attempts.append(record)
+            _write_attempt_artifacts(attempt_dir, record=record, scenario=None, proposal=proposal)
+            _append_attempt(attempts_path, record)
+            continue
 
-
-def _run_generated_scenario(
-    *,
-    scenario: AttackScenario,
-    attempt_number: int,
-    artifact_store: SearchArtifactStore,
-) -> tuple[AttackScenario, AttemptRecord]:
-    rendered_scenario, runtime_secrets = materialize_runtime_secrets(scenario)
-    artifact_store.write_runtime_secrets(attempt_number, runtime_secrets.redacted())
-    victim = make_runner("victim", rendered_scenario.agents.victim)
-    try:
-        victim_result = _with_agent_crash_retries(
-            lambda: victim.run_victim(
-                rendered_scenario,
-                attempt_number,
-                output_dir=artifact_store.attempt_dir(attempt_number),
-            )
+        record = _run_scenario(
+            scenario=scenario,
+            proposal=proposal,
+            attempt_number=attempt_number,
+            attempt_dir=attempt_dir,
         )
-    except RuntimeError as exc:
-        return rendered_scenario, AttemptRecord(
-            attempt=attempt_number,
-            patch_error=f"victim crashed: {exc}",
-            victim_prompt=rendered_scenario.seed.user_task,
+        _attach_analysis(
+            analyzer=analyzer,
+            config=config,
+            scenario=scenario,
+            record=record,
+            attempt_number=attempt_number,
+            attempt_dir=attempt_dir,
         )
+        attempts.append(record)
+        _write_attempt_artifacts(attempt_dir, record=record, scenario=scenario, proposal=proposal)
+        _append_attempt(attempts_path, record)
+        if record.success:
+            winning_attempt = attempt_number
+            break
 
-    evaluator_results = run_evaluators(
-        rendered_scenario.evaluators,
-        victim_result.tool_calls,
-        scenario=rendered_scenario,
-        runtime_secrets=runtime_secrets.values,
-    )
-    return rendered_scenario, AttemptRecord(
-        attempt=attempt_number,
-        patch=None,
-        victim_prompt=rendered_scenario.seed.user_task,
-        victim_output=victim_result.final_text,
-        tool_calls=victim_result.tool_calls,
-        evaluator_results=evaluator_results,
-        success=all_evaluators_passed(evaluator_results),
-    )
-
-
-def _build_attack_search_result(
-    config: ExperimentConfig,
-    attempts: list[AttemptRecord],
-    winning_attempt: int | None,
-    out_path: Path | None,
-) -> BenchmarkResult:
-    return BenchmarkResult(
+    result = BenchmarkResult(
         scenario_id=config.id,
         success=winning_attempt is not None,
         winning_attempt=winning_attempt,
@@ -269,26 +104,143 @@ def _build_attack_search_result(
         attempts=attempts,
         output_dir=str(out_path) if out_path is not None else None,
     )
+    if out_path is not None:
+        _write_json(out_path, "summary.json", result.model_dump(mode="json", exclude={"attempts"}))
+    return result
 
 
-def _with_agent_crash_retries(call):
-    last_exc: Exception | None = None
-    for _ in range(AGENT_CRASH_RETRIES + 1):
-        try:
-            return call()
-        except Exception as exc:
-            last_exc = exc
-    assert last_exc is not None
-    if isinstance(last_exc, RuntimeError):
-        raise last_exc
-    raise RuntimeError(str(last_exc)) from last_exc
+def prepare_scenario(
+    proposal: ScenarioProposal,
+    config: ExperimentConfig,
+    *,
+    attempt_number: int,
+) -> Scenario:
+    scenario = build_scenario_from_validated_proposal(
+        proposal,
+        config,
+        attempt_number=attempt_number,
+    )
+    # Compile once during preparation so body-level errors are scenario errors,
+    # not victim-runtime surprises.
+    ToolImplExecutor(
+        scenario.tool_impls,
+        timeout_seconds=config.benchmark.constraints.tool_timeout_seconds,
+    )
+    return scenario
 
 
-def _attach_attempt_analysis(
+def validate_supported_config(config: ExperimentConfig) -> None:
+    for role, agent in (
+        ("red_team", config.agents.red_team),
+        ("victim", config.agents.victim),
+    ):
+        _validate_agent_runtime(role, agent)
+
+
+def _generate_scenario(
+    *,
+    red_team,
+    config: ExperimentConfig,
+    attempt_number: int,
+    attempts: list[AttemptRecord],
+    attempt_dir: Path | None,
+) -> tuple[Scenario | None, ScenarioProposal | None, str | None, bool]:
+    try:
+        raw = _with_agent_crash_retries(
+            lambda: red_team.propose_scenario(
+                config,
+                attempt_number,
+                attempts,
+                output_dir=attempt_dir,
+            )
+        )
+    except RuntimeError as exc:
+        return None, None, f"red team agent crashed: {exc}", False
+    _write_text(attempt_dir, "red_team_scenario.raw.txt", raw)
+    try:
+        proposal = parse_scenario_proposal(raw)
+        return prepare_scenario(proposal, config, attempt_number=attempt_number), proposal, None, True
+    except (KeyError, ValueError, ValidationError) as exc:
+        return _repair_scenario(
+            red_team=red_team,
+            config=config,
+            attempt_number=attempt_number,
+            attempts=attempts,
+            attempt_dir=attempt_dir,
+            repair_error=str(exc),
+        )
+
+
+def _repair_scenario(
+    *,
+    red_team,
+    config: ExperimentConfig,
+    attempt_number: int,
+    attempts: list[AttemptRecord],
+    attempt_dir: Path | None,
+    repair_error: str,
+) -> tuple[Scenario | None, ScenarioProposal | None, str | None, bool]:
+    try:
+        repaired = _with_agent_crash_retries(
+            lambda: red_team.propose_scenario(
+                config,
+                attempt_number,
+                attempts,
+                repair_error=repair_error,
+                output_dir=attempt_dir,
+            )
+        )
+    except RuntimeError as exc:
+        _write_text(attempt_dir, "red_team_repair_scenario.raw.txt", "")
+        return None, None, f"red team repair crashed: {exc}", True
+    _write_text(attempt_dir, "red_team_repair_scenario.raw.txt", repaired)
+    try:
+        proposal = parse_scenario_proposal(repaired)
+        return prepare_scenario(proposal, config, attempt_number=attempt_number), proposal, None, True
+    except (KeyError, ValueError, ValidationError) as exc:
+        return None, None, str(exc), True
+
+
+def _run_scenario(
+    *,
+    scenario: Scenario,
+    proposal: ScenarioProposal | None,
+    attempt_number: int,
+    attempt_dir: Path | None,
+) -> AttemptRecord:
+    victim = make_runner("victim", scenario.agents.victim)
+    try:
+        victim_result = _with_agent_crash_retries(
+            lambda: victim.run_victim(
+                scenario,
+                attempt_number,
+                output_dir=attempt_dir,
+            )
+        )
+    except RuntimeError as exc:
+        return AttemptRecord(
+            attempt=attempt_number,
+            proposal=proposal.model_dump(mode="json") if proposal else None,
+            error=f"victim crashed: {exc}",
+            victim_prompt=scenario.task.user_task,
+        )
+    return AttemptRecord(
+        attempt=attempt_number,
+        proposal=proposal.model_dump(mode="json") if proposal else None,
+        victim_prompt=scenario.task.user_task,
+        victim_output=victim_result.final_text,
+        tool_calls=victim_result.tool_calls,
+        leak_events=victim_result.leak_events,
+        resource_state=victim_result.resource_state,
+        success=bool(victim_result.leak_events),
+    )
+
+
+def _attach_analysis(
     *,
     analyzer,
     config: ExperimentConfig,
-    scenario: AttackScenario | None,
+    scenario: Scenario | None,
     record: AttemptRecord,
     attempt_number: int,
     attempt_dir: Path | None,
@@ -314,123 +266,120 @@ def _attach_attempt_analysis(
         )
 
 
-def validate_supported_config(config: ExperimentConfig) -> None:
-    for role, agent in (
-        ("red_team", config.agents.red_team),
-        ("victim", config.agents.victim),
-    ):
-        _validate_agent_runtime(role, agent)
-
-
-def _prepare_generated_scenario(
-    proposal: AttackScenarioProposal, config: ExperimentConfig, *, attempt_number: int
-) -> AttackScenario:
-    scenario = proposal.to_attack_scenario(
-        id=f"{config.id}-attempt-{attempt_number}",
-        agents=config.agents,
+def _resolve_analyzer_config(config: ExperimentConfig) -> AgentConfig:
+    if config.agents.analyzer is not None:
+        return config.agents.analyzer
+    analyzer_config = config.agents.red_team
+    print(
+        "warning: analyzer agent not configured; inheriting red_team config "
+        f"(provider={analyzer_config.provider}, model={analyzer_config.model}) "
+        "-- consider setting [agents.analyzer] to a cheaper model",
+        file=sys.stderr,
     )
-    data = scenario.model_dump(mode="json")
-    if config.tool_surface is not None:
-        data["environment"] = _apply_fixed_tool_surface(
-            scenario.environment, config.tool_surface
-        ).model_dump(mode="json")
-    prepared = AttackScenario.model_validate(data)
-    _validate_generated_scenario(prepared, config)
-    return prepared
+    return analyzer_config
 
 
-def _apply_fixed_tool_surface(
-    generated: MockEnvironment, fixed_surface: MockEnvironment
-) -> MockEnvironment:
-    fixed_servers = {server.name: server for server in fixed_surface.mcp_servers}
-    generated_servers = {server.name: server for server in generated.mcp_servers}
-
-    unknown_servers = sorted(set(generated_servers) - set(fixed_servers))
-    if unknown_servers:
-        raise ValueError(
-            "generated scenario uses servers outside fixed tool_surface: "
-            + ", ".join(unknown_servers)
-        )
-
-    materialized_servers: list[MockMcpServer] = []
-    for fixed_server in fixed_surface.mcp_servers:
-        generated_server = generated_servers.get(fixed_server.name)
-        generated_tools = (
-            {tool.name: tool for tool in generated_server.tools}
-            if generated_server is not None
-            else {}
-        )
-        fixed_tool_names = {tool.name for tool in fixed_server.tools}
-        unknown_tools = sorted(set(generated_tools) - fixed_tool_names)
-        if unknown_tools:
-            qualified = ", ".join(
-                f"{fixed_server.name}.{tool}" for tool in unknown_tools
-            )
-            raise ValueError(
-                "generated scenario uses tools outside fixed tool_surface: " + qualified
-            )
-
-        tools: list[MockTool] = []
-        for fixed_tool in fixed_server.tools:
-            generated_tool = generated_tools.get(fixed_tool.name)
-            responses = (
-                generated_tool.responses
-                if generated_tool is not None
-                else fixed_tool.responses
-            )
-            tools.append(
-                MockTool(
-                    name=fixed_tool.name,
-                    description=fixed_tool.description,
-                    args_schema=fixed_tool.args_schema,
-                    responses=responses,
-                )
-            )
-        materialized_servers.append(MockMcpServer(name=fixed_server.name, tools=tools))
-
-    return MockEnvironment(mcp_servers=materialized_servers)
+def _with_agent_crash_retries(call):
+    last_exc: Exception | None = None
+    for _ in range(AGENT_CRASH_RETRIES + 1):
+        try:
+            return call()
+        except Exception as exc:
+            last_exc = exc
+    assert last_exc is not None
+    if isinstance(last_exc, RuntimeError):
+        raise last_exc
+    raise RuntimeError(str(last_exc)) from last_exc
 
 
-def _validate_generated_scenario(
-    scenario: AttackScenario, config: ExperimentConfig
+def _append_attempt(path: Path | None, record: AttemptRecord) -> None:
+    if path is None:
+        return
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(record.model_dump_json() + "\n")
+
+
+def _load_attempts(path: Path | None) -> list[AttemptRecord]:
+    if path is None or not path.exists():
+        return []
+    return [
+        AttemptRecord.model_validate_json(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def _attempt_dir(output_dir: Path | None, attempt_number: int) -> Path | None:
+    if output_dir is None:
+        return None
+    path = output_dir / f"attempt-{attempt_number:03d}"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _write_attempt_artifacts(
+    attempt_dir: Path | None,
+    *,
+    record: AttemptRecord,
+    scenario: Scenario | None,
+    proposal: ScenarioProposal | None,
 ) -> None:
-    constraints = config.benchmark.constraints
-    server_count = len(scenario.environment.mcp_servers)
-    if server_count == 0:
-        raise ValueError(
-            "generated scenario must define at least one mocked MCP server"
+    if attempt_dir is None:
+        return
+    _write_json(attempt_dir, "attempt.json", record.model_dump(mode="json"))
+    _write_json(
+        attempt_dir,
+        "metadata.json",
+        {
+            "attempt": record.attempt,
+            "success": record.success,
+            "error": record.error,
+            "tool_call_count": len(record.tool_calls),
+            "leak_count": len(record.leak_events),
+        },
+    )
+    _write_json(attempt_dir, "proposal.json", proposal.model_dump(mode="json") if proposal else None)
+    if proposal is not None:
+        _write_text(
+            attempt_dir,
+            "proposal.yaml",
+            json_to_yaml(proposal.model_dump(mode="json")),
         )
-    # Server-count and tools-per-server caps only constrain from-scratch generation.
-    # When a fixed tool_surface is supplied, the surface itself pins these dimensions.
-    has_fixed_surface = config.tool_surface is not None
-    if not has_fixed_surface and server_count > constraints.max_mcp_servers:
-        raise ValueError(
-            f"generated scenario defines {server_count} MCP servers, max is {constraints.max_mcp_servers}"
+    _write_json(attempt_dir, "tool_calls.json", [call.model_dump(mode="json") for call in record.tool_calls])
+    _write_json(attempt_dir, "leak_events.json", [event.model_dump(mode="json") for event in record.leak_events])
+    _write_json(attempt_dir, "resource_store.final.json", record.resource_state)
+    _write_json(attempt_dir, "analysis.json", record.analysis.model_dump(mode="json") if record.analysis else None)
+    _write_text(attempt_dir, "victim_prompt.txt", record.victim_prompt or "")
+    _write_text(attempt_dir, "victim_output.txt", record.victim_output)
+    if scenario is not None:
+        _write_json(attempt_dir, "scenario.json", scenario.model_dump(mode="json"))
+        _write_text(attempt_dir, "scenario.yaml", scenario.to_yaml())
+        _write_text(
+            attempt_dir,
+            "generated_tool_code.py",
+            ToolImplExecutor(
+                scenario.tool_impls,
+                timeout_seconds=scenario.tool_timeout_seconds,
+            ).generated_source(),
         )
-    for server in scenario.environment.mcp_servers:
-        tool_count = len(server.tools)
-        if not has_fixed_surface and tool_count > constraints.max_tools_per_server:
-            raise ValueError(
-                f"generated MCP server {server.name} defines {tool_count} tools, "
-                f"max is {constraints.max_tools_per_server}"
-            )
-        for tool in server.tools:
-            for response in tool.responses:
-                response_chars = len(response.content)
-                if response.structured_content is not None:
-                    response_chars += len(json.dumps(response.structured_content))
-                if response_chars > constraints.max_tool_response_chars:
-                    raise ValueError(
-                        f"generated response for {server.name}.{tool.name} is {response_chars} chars, "
-                        f"max is {constraints.max_tool_response_chars}"
-                    )
 
 
-def _split_qualified_tool_name(tool_name: str) -> tuple[str | None, str]:
-    if "." not in tool_name:
-        return None, tool_name
-    server_name, bare_tool_name = tool_name.split(".", 1)
-    return server_name, bare_tool_name
+def json_to_yaml(data: Any) -> str:
+    import yaml
+
+    return yaml.safe_dump(data, sort_keys=False)
+
+
+def _write_json(directory: Path | None, filename: str, data: Any) -> None:
+    if directory is None:
+        return
+    (directory / filename).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+def _write_text(directory: Path | None, filename: str, text: str) -> None:
+    if directory is None:
+        return
+    (directory / filename).write_text(text, encoding="utf-8")
 
 
 def _validate_agent_runtime(role: str, agent: AgentConfig) -> None:

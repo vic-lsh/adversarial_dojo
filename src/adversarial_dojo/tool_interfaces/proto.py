@@ -7,33 +7,37 @@ from typing import Any
 
 from google.protobuf import descriptor_pb2
 
-from adversarial_dojo.models import MockEnvironment, MockMcpServer, MockTool
+from adversarial_dojo.tool_interfaces.models import (
+    ToolInterface,
+    ToolServerSpec,
+    ToolSpec,
+)
 
 
-def load_proto_tool_surface(path: str | Path) -> MockEnvironment:
+def load_proto_tool_interface(path: str | Path) -> ToolInterface:
     proto_path = Path(path)
     descriptor_set = _compile_proto(proto_path)
     messages = _message_index(descriptor_set)
     enums = _enum_index(descriptor_set)
 
-    servers: list[MockMcpServer] = []
+    servers: list[ToolServerSpec] = []
     for file_descriptor in descriptor_set.file:
         package = file_descriptor.package
         for service in file_descriptor.service:
-            tools: list[MockTool] = []
+            tools: list[ToolSpec] = []
             for method in service.method:
                 input_message = messages[method.input_type]
                 tools.append(
-                    MockTool(
+                    ToolSpec(
                         name=_to_snake_case(method.name),
                         description=f"{service.name}.{method.name}",
                         args_schema=_message_to_schema(input_message, messages, enums),
                     )
                 )
-            servers.append(MockMcpServer(name=_service_name(package, service.name), tools=tools))
+            servers.append(ToolServerSpec(name=_service_name(package, service.name), tools=tools))
     if not servers:
-        raise ValueError(f"proto tool surface must define at least one service: {proto_path}")
-    return MockEnvironment(mcp_servers=servers)
+        raise ValueError(f"proto tool interface must define at least one service: {proto_path}")
+    return ToolInterface(servers=servers)
 
 
 def _compile_proto(proto_path: Path) -> descriptor_pb2.FileDescriptorSet:
