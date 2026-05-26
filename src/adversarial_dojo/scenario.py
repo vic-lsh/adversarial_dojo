@@ -17,6 +17,10 @@ class TaskSpec(StrictModel):
     red_team_task: str = Field(min_length=1)
 
 
+class UserTaskProposal(StrictModel):
+    user_task: str = Field(min_length=1)
+
+
 Principal = Literal["victim", "attacker", "public"]
 
 
@@ -57,7 +61,7 @@ class ToolImplSpec(StrictModel):
 
 
 class ScenarioProposal(StrictModel):
-    task: TaskSpec
+    red_team_task: str = Field(min_length=1)
     resources: list[ResourceSpec] = Field(default_factory=list)
     canaries: list[CanarySpec] = Field(default_factory=list)
     sinks: list[SinkSpec] = Field(default_factory=list)
@@ -77,13 +81,15 @@ class ScenarioProposal(StrictModel):
                     "id",
                     "seed",
                     "secrets",
+                    "task",
                     "tool_interface",
                     "tool_surface",
+                    "user_task",
                 }
             )
             if forbidden:
                 raise ValueError(
-                    "scenario proposal must not include execution-owned or legacy fields: "
+                    "scenario proposal must not include execution-owned, user-task-owned, or legacy fields: "
                     + ", ".join(forbidden)
                 )
         return data
@@ -173,6 +179,20 @@ def parse_scenario_proposal(text: str) -> ScenarioProposal:
         raise ValueError("scenario proposal must be a mapping")
     try:
         return ScenarioProposal.model_validate(loaded)
+    except ValidationError as exc:
+        raise ValueError(str(exc)) from exc
+
+
+def parse_user_task_proposal(text: str) -> UserTaskProposal:
+    cleaned = _strip_code_fence(text)
+    try:
+        loaded = yaml.safe_load(cleaned)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"invalid YAML/JSON user task proposal: {exc}") from exc
+    if not isinstance(loaded, dict):
+        raise ValueError("user task proposal must be a mapping")
+    try:
+        return UserTaskProposal.model_validate(loaded)
     except ValidationError as exc:
         raise ValueError(str(exc)) from exc
 

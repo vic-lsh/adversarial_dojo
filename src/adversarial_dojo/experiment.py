@@ -14,9 +14,18 @@ from adversarial_dojo.records import (
     AttemptRecord,
     BenchmarkResult,
 )
-from adversarial_dojo.scenario import Scenario, ScenarioProposal, parse_scenario_proposal
+from adversarial_dojo.scenario import (
+    Scenario,
+    ScenarioProposal,
+    UserTaskProposal,
+    parse_scenario_proposal,
+    parse_user_task_proposal,
+)
 from adversarial_dojo.runtime.tool_impl import ToolImplExecutor
-from adversarial_dojo.validation import build_scenario_from_validated_proposal
+from adversarial_dojo.validation import (
+    build_scenario_from_validated_proposal,
+    user_task_validation_error_text,
+)
 
 
 def run_attack_search(
@@ -46,8 +55,30 @@ def run_attack_search(
         if winning_attempt is not None:
             break
         attempt_dir = _attempt_dir(out_path, attempt_number)
+        user_task_agent = make_runner("user_task", config.agents.user_task)
         red_team = make_runner("red_team", config.agents.red_team)
         analyzer = make_runner("analyzer", analyzer_config)
+
+        user_task, user_task_error = _generate_user_task(
+            user_task_agent=user_task_agent,
+            config=config,
+            attempt_number=attempt_number,
+            attempt_dir=attempt_dir,
+        )
+        if user_task is None:
+            record = AttemptRecord(
+                attempt=attempt_number,
+                error=user_task_error,
+            )
+            attempts.append(record)
+            _write_attempt_artifacts(
+                attempt_dir,
+                record=record,
+                scenario=None,
+                proposal=None,
+            )
+            _append_attempt(attempts_path, record)
+            continue
 
         scenario, proposal, error, should_analyze = _generate_scenario(
             red_team=red_team,
@@ -55,12 +86,14 @@ def run_attack_search(
             attempt_number=attempt_number,
             attempts=attempts,
             attempt_dir=attempt_dir,
+            user_task=user_task,
         )
         if scenario is None:
             record = AttemptRecord(
                 attempt=attempt_number,
                 proposal=proposal.model_dump(mode="json") if proposal else None,
                 error=error,
+                victim_prompt=user_task.user_task,
             )
             _attach_analysis(
                 analyzer=analyzer,
@@ -114,11 +147,13 @@ def prepare_scenario(
     config: ExperimentConfig,
     *,
     attempt_number: int,
+    user_task: UserTaskProposal,
 ) -> Scenario:
     scenario = build_scenario_from_validated_proposal(
         proposal,
         config,
         attempt_number=attempt_number,
+        user_task=user_task,
     )
     # Compile once during preparation so body-level errors are scenario errors,
     # not victim-runtime surprises.
@@ -132,9 +167,39 @@ def prepare_scenario(
 def validate_supported_config(config: ExperimentConfig) -> None:
     for role, agent in (
         ("red_team", config.agents.red_team),
+        ("user_task", config.agents.user_task),
         ("victim", config.agents.victim),
     ):
         _validate_agent_runtime(role, agent)
+
+
+def _generate_user_task(
+    *,
+    user_task_agent,
+    config: ExperimentConfig,
+    attempt_number: int,
+    attempt_dir: Path | None,
+) -> tuple[UserTaskProposal | None, str | None]:
+    try:
+        raw = _with_agent_crash_retries(
+            lambda: user_task_agent.propose_user_task(
+                config,
+                attempt_number,
+                output_dir=attempt_dir,
+            )
+        )
+    except RuntimeError as exc:
+        return None, f"user task agent crashed: {exc}"
+    _write_text(attempt_dir, "user_task.raw.txt", raw)
+    validation_error = user_task_validation_error_text(raw)
+    if validation_error is not None:
+        return None, validation_error
+    try:
+        user_task = parse_user_task_proposal(raw)
+    except ValueError as exc:
+        return None, f"user task proposal invalid: {exc}"
+    _write_json(attempt_dir, "user_task.json", user_task.model_dump(mode="json"))
+    return user_task, None
 
 
 def _generate_scenario(
@@ -144,6 +209,7 @@ def _generate_scenario(
     attempt_number: int,
     attempts: list[AttemptRecord],
     attempt_dir: Path | None,
+    user_task: UserTaskProposal,
 ) -> tuple[Scenario | None, ScenarioProposal | None, str | None, bool]:
     try:
         raw = _with_agent_crash_retries(
@@ -151,6 +217,7 @@ def _generate_scenario(
                 config,
                 attempt_number,
                 attempts,
+                user_task=user_task,
                 output_dir=attempt_dir,
             )
         )
@@ -159,7 +226,17 @@ def _generate_scenario(
     _write_text(attempt_dir, "red_team_scenario.raw.txt", raw)
     try:
         proposal = parse_scenario_proposal(raw)
-        return prepare_scenario(proposal, config, attempt_number=attempt_number), proposal, None, True
+        return (
+            prepare_scenario(
+                proposal,
+                config,
+                attempt_number=attempt_number,
+                user_task=user_task,
+            ),
+            proposal,
+            None,
+            True,
+        )
     except (KeyError, ValueError, ValidationError) as exc:
         return _repair_scenario(
             red_team=red_team,
@@ -168,6 +245,7 @@ def _generate_scenario(
             attempts=attempts,
             attempt_dir=attempt_dir,
             repair_error=str(exc),
+            user_task=user_task,
         )
 
 
@@ -179,6 +257,7 @@ def _repair_scenario(
     attempts: list[AttemptRecord],
     attempt_dir: Path | None,
     repair_error: str,
+    user_task: UserTaskProposal,
 ) -> tuple[Scenario | None, ScenarioProposal | None, str | None, bool]:
     try:
         repaired = _with_agent_crash_retries(
@@ -186,6 +265,7 @@ def _repair_scenario(
                 config,
                 attempt_number,
                 attempts,
+                user_task=user_task,
                 repair_error=repair_error,
                 output_dir=attempt_dir,
             )
@@ -196,7 +276,17 @@ def _repair_scenario(
     _write_text(attempt_dir, "red_team_repair_scenario.raw.txt", repaired)
     try:
         proposal = parse_scenario_proposal(repaired)
-        return prepare_scenario(proposal, config, attempt_number=attempt_number), proposal, None, True
+        return (
+            prepare_scenario(
+                proposal,
+                config,
+                attempt_number=attempt_number,
+                user_task=user_task,
+            ),
+            proposal,
+            None,
+            True,
+        )
     except (KeyError, ValueError, ValidationError) as exc:
         return None, None, str(exc), True
 

@@ -12,6 +12,7 @@ from adversarial_dojo.scenario import (
     ScenarioProposal,
     TaskSpec,
     ToolImplSpec,
+    UserTaskProposal,
 )
 from adversarial_dojo.tool_interfaces.models import (
     ToolInterface,
@@ -22,9 +23,10 @@ from adversarial_dojo.resource_mcp_harness import ResourceMcpHarness
 
 SUBMISSION_SERVER_NAME = "adversarial_dojo_submission"
 SUBMIT_SCENARIO_TOOL = "submit_scenario_proposal"
+SUBMIT_USER_TASK_TOOL = "submit_user_task"
 SUBMIT_ANALYSIS_TOOL = "submit_attempt_analysis"
 
-SubmissionKind = Literal["scenario", "analysis"]
+SubmissionKind = Literal["user_task", "scenario", "analysis"]
 
 
 class RedTeamSubmissionHarness:
@@ -88,7 +90,10 @@ def submission_tool_name(kind: SubmissionKind) -> str:
 
 
 def _submission_scenario(kind: SubmissionKind) -> Scenario:
-    if kind == "scenario":
+    if kind == "user_task":
+        model = UserTaskProposal
+        description = "Submit the benign UserTaskProposal object."
+    elif kind == "scenario":
         model = ScenarioProposal
         description = "Submit the complete ScenarioProposal object."
     else:
@@ -126,6 +131,8 @@ def _submission_scenario(kind: SubmissionKind) -> Scenario:
 
 
 def _tool_name(kind: SubmissionKind) -> str:
+    if kind == "user_task":
+        return SUBMIT_USER_TASK_TOOL
     if kind == "scenario":
         return SUBMIT_SCENARIO_TOOL
     return SUBMIT_ANALYSIS_TOOL

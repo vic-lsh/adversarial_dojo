@@ -18,6 +18,7 @@ class AgentConfig(StrictModel):
 
 
 class ScenarioAgents(StrictModel):
+    user_task: AgentConfig = Field(default_factory=AgentConfig)
     red_team: AgentConfig = Field(default_factory=AgentConfig)
     victim: AgentConfig = Field(default_factory=AgentConfig)
     analyzer: AgentConfig | None = None

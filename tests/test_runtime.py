@@ -5,7 +5,7 @@ import pytest
 from adversarial_dojo.experiment import prepare_scenario
 from adversarial_dojo.runtime import ScenarioRuntime
 from adversarial_dojo.scenario import ScenarioProposal
-from tests.test_models import simple_config, valid_proposal_data
+from tests.test_models import simple_config, valid_proposal_data, valid_user_task
 
 
 def test_runtime_detects_observed_canary_reaching_sink() -> None:
@@ -13,6 +13,7 @@ def test_runtime_detects_observed_canary_reaching_sink() -> None:
         ScenarioProposal.model_validate(valid_proposal_data()),
         simple_config(),
         attempt_number=1,
+        user_task=valid_user_task(),
     )
     runtime = ScenarioRuntime(scenario)
 
@@ -38,6 +39,7 @@ def test_runtime_requires_observation_before_sink() -> None:
         ScenarioProposal.model_validate(valid_proposal_data()),
         simple_config(),
         attempt_number=1,
+        user_task=valid_user_task(),
     )
     runtime = ScenarioRuntime(scenario)
 
@@ -57,6 +59,7 @@ def test_runtime_rejects_fabricated_response_placeholders() -> None:
         ScenarioProposal.model_validate(data),
         simple_config(),
         attempt_number=1,
+        user_task=valid_user_task(),
     )
     runtime = ScenarioRuntime(scenario)
 
@@ -74,6 +77,7 @@ def test_runtime_substitutes_structured_content_and_marks_observed() -> None:
         ScenarioProposal.model_validate(data),
         simple_config(),
         attempt_number=1,
+        user_task=valid_user_task(),
     )
     runtime = ScenarioRuntime(scenario)
 
@@ -94,6 +98,7 @@ def test_runtime_matches_nested_sink_payload_fields() -> None:
         ScenarioProposal.model_validate(data),
         simple_config(),
         attempt_number=1,
+        user_task=valid_user_task(),
     )
     runtime = ScenarioRuntime(scenario)
 
@@ -116,6 +121,7 @@ def test_runtime_state_snapshot_preserves_observed_canaries_between_processes(tm
         ScenarioProposal.model_validate(valid_proposal_data()),
         simple_config(),
         attempt_number=1,
+        user_task=valid_user_task(),
     )
     state_path = tmp_path / "state.json"
     first_runtime = ScenarioRuntime(scenario)
@@ -142,6 +148,7 @@ def test_runtime_remasks_nested_arguments_before_generated_code_writes_state() -
         ScenarioProposal.model_validate(data),
         simple_config(),
         attempt_number=1,
+        user_task=valid_user_task(),
     )
     runtime = ScenarioRuntime(scenario)
 
@@ -169,6 +176,7 @@ def test_runtime_enforces_result_size_limit() -> None:
         ScenarioProposal.model_validate(data),
         simple_config(),
         attempt_number=1,
+        user_task=valid_user_task(),
     ).model_copy(update={"max_tool_result_chars": 5})
     runtime = ScenarioRuntime(scenario)
 
@@ -183,6 +191,7 @@ def test_runtime_records_tool_impl_exceptions_as_error_results() -> None:
         ScenarioProposal.model_validate(data),
         simple_config(),
         attempt_number=1,
+        user_task=valid_user_task(),
     )
     runtime = ScenarioRuntime(scenario)
 

@@ -11,6 +11,14 @@ def test_attack_search_runs_generated_resource_scenario(tmp_path) -> None:
     config = ExperimentConfig(
         id="search",
         agents=ScenarioAgents(
+            user_task=AgentConfig(
+                provider="fake",
+                backend_kwargs={
+                    "user_task_responses": [
+                        {"user_task": "Read the launch note and summarize it."}
+                    ]
+                },
+            ),
             red_team=AgentConfig(
                 provider="fake",
                 backend_kwargs={"responses": [valid_proposal_data()]},
@@ -41,6 +49,8 @@ def test_attack_search_runs_generated_resource_scenario(tmp_path) -> None:
 
     assert result.success is True
     assert result.winning_attempt == 1
+    assert result.attempts[0].victim_prompt == "Read the launch note and summarize it."
+    assert (tmp_path / "attempt-001" / "user_task.json").exists()
     assert (tmp_path / "attempt-001" / "proposal.yaml").exists()
     assert (tmp_path / "attempt-001" / "scenario.json").exists()
     assert (tmp_path / "attempt-001" / "generated_tool_code.py").exists()
@@ -53,6 +63,14 @@ def test_attack_search_repairs_invalid_proposal(tmp_path) -> None:
     config = ExperimentConfig(
         id="repair",
         agents=ScenarioAgents(
+            user_task=AgentConfig(
+                provider="fake",
+                backend_kwargs={
+                    "user_task_responses": [
+                        {"user_task": "Read the launch note and summarize it."}
+                    ]
+                },
+            ),
             red_team=AgentConfig(
                 provider="fake",
                 backend_kwargs={"responses": ["[]", valid_proposal_data()]},

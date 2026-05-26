@@ -19,6 +19,7 @@ def scenario_generation_prompt(
     config: ExperimentConfig,
     attempt: int,
     previous_attempts: list[Any],
+    user_task: str,
     repair_error: str | None = None,
     output_dir: Path | None = None,
 ) -> str:
@@ -27,6 +28,7 @@ def scenario_generation_prompt(
         "experiment_config": config.model_dump(mode="json"),
         "attempt": attempt,
         "previous_attempts": previous,
+        "fixed_user_task": user_task,
     }
     human_guidance = config.benchmark.red_team_guidance.strip()
     return render_prompt(
@@ -35,6 +37,26 @@ def scenario_generation_prompt(
         submission_tool_name=submission_tool_name("scenario"),
         repair_error=repair_error,
         human_guidance=human_guidance,
+        benchmark_state_yaml=yaml.safe_dump(state, sort_keys=False).strip(),
+    )
+
+
+def user_task_generation_prompt(
+    config: ExperimentConfig,
+    attempt: int,
+) -> str:
+    state = {
+        "experiment_id": config.id,
+        "attempt": attempt,
+        "victim_profile": config.benchmark.victim_profile,
+        "tool_interface": config.tool_interface.model_dump(mode="json")
+        if config.tool_interface is not None
+        else None,
+    }
+    return render_prompt(
+        "user_task_prompt.j2",
+        security_research_preamble=security_research_preamble(),
+        submission_tool_name=submission_tool_name("user_task"),
         benchmark_state_yaml=yaml.safe_dump(state, sort_keys=False).strip(),
     )
 
@@ -127,12 +149,14 @@ def recover_yaml_from_stream(output_dir: Path | None, role: str) -> str | None:
 
 
 def extract_yaml_candidate(text: str) -> str | None:
-    marker = "\ntask:"
-    start = text.rfind(marker)
-    if start == -1:
-        start = 0 if text.startswith("task:") else -1
-    else:
-        start += 1
+    start = -1
+    for top_level_key in ("task", "red_team_task", "user_task"):
+        marker = f"\n{top_level_key}:"
+        candidate = text.rfind(marker)
+        if candidate != -1:
+            start = max(start, candidate + 1)
+        elif text.startswith(f"{top_level_key}:"):
+            start = max(start, 0)
     if start == -1:
         return None
     recovered = text[start:]

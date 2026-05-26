@@ -13,16 +13,14 @@ def test_recorder_accepts_generic_codex_mcp_tool_call() -> None:
         {
             "server": "adversarial_dojo_submission",
             "tool": "submit_scenario_proposal",
-            "arguments": {"task": {"user_task": "x", "red_team_task": "y"}},
+            "arguments": {"red_team_task": "y"},
         },
     )
 
     assert recorder.tool_events[0].tool == (
         "adversarial_dojo_submission.submit_scenario_proposal"
     )
-    assert recorder.tool_events[0].arguments == {
-        "task": {"user_task": "x", "red_team_task": "y"}
-    }
+    assert recorder.tool_events[0].arguments == {"red_team_task": "y"}
 
 
 def test_recorder_preserves_unknown_tool_events_without_crashing() -> None:
@@ -35,8 +33,8 @@ def test_recorder_preserves_unknown_tool_events_without_crashing() -> None:
 
 
 def test_red_team_submission_validation_feedback_reuses_session(tmp_path) -> None:
-    invalid_payload = {"task": {"user_task": "bad", "red_team_task": "bad"}}
-    valid_payload = {"task": {"user_task": "ok", "red_team_task": "ok"}}
+    invalid_payload = {"red_team_task": "bad"}
+    valid_payload = {"red_team_task": "ok"}
     RecordingCodingAgent.instances = []
 
     result = generate_red_team_submission(
@@ -50,10 +48,10 @@ def test_red_team_submission_validation_feedback_reuses_session(tmp_path) -> Non
         attempt=1,
         output_dir=tmp_path,
         event_recorder=AgentTrajectoryRecorder("red_team", tmp_path),
-        validator=lambda text: None if "user_task: ok" in text else "missing ok marker",
+        validator=lambda text: None if "red_team_task: ok" in text else "missing ok marker",
     )
 
-    assert "user_task: ok" in result
+    assert "red_team_task: ok" in result
     assert len(RecordingCodingAgent.instances) == 1
     session = RecordingCodingAgent.instances[0].session
     assert session is not None

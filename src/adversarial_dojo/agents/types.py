@@ -5,15 +5,24 @@ from typing import Any, Protocol
 
 from adversarial_dojo.config import ExperimentConfig
 from adversarial_dojo.records import AgentRunResult, AttemptAnalysis, AttemptRecord
-from adversarial_dojo.scenario import Scenario
+from adversarial_dojo.scenario import Scenario, UserTaskProposal
 
 
 class RedTeamRunner(Protocol):
+    def propose_user_task(
+        self,
+        config: ExperimentConfig,
+        attempt: int,
+        output_dir: Path | None = None,
+    ) -> str:
+        ...
+
     def propose_scenario(
         self,
         config: ExperimentConfig,
         attempt: int,
         previous_attempts: list[Any],
+        user_task: UserTaskProposal,
         repair_error: str | None = None,
         output_dir: Path | None = None,
     ) -> str:

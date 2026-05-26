@@ -8,6 +8,7 @@ from adversarial_dojo.agents.prompts import (
     analysis_prompt,
     recover_yaml_from_stream,
     scenario_generation_prompt,
+    user_task_generation_prompt,
 )
 from adversarial_dojo.agents.trajectories import AgentTrajectoryRecorder
 from adversarial_dojo.agents.utils import (
@@ -24,8 +25,11 @@ from adversarial_dojo.red_team_submission import (
     submission_to_text,
     submission_tool_name,
 )
-from adversarial_dojo.scenario import Scenario
-from adversarial_dojo.validation import scenario_validation_error_text
+from adversarial_dojo.scenario import Scenario, UserTaskProposal
+from adversarial_dojo.validation import (
+    scenario_validation_error_text,
+    user_task_validation_error_text,
+)
 
 
 @dataclass
@@ -76,6 +80,7 @@ class AgentshimRunner:
         config: ExperimentConfig,
         attempt: int,
         previous_attempts: list[Any],
+        user_task: UserTaskProposal,
         repair_error: str | None = None,
         output_dir: Path | None = None,
     ) -> str:
@@ -85,6 +90,7 @@ class AgentshimRunner:
             config,
             attempt,
             previous_attempts,
+            user_task=user_task.user_task,
             repair_error=repair_error,
             output_dir=output_dir,
         )
@@ -102,6 +108,33 @@ class AgentshimRunner:
             )
         except Exception:
             recovered = recover_yaml_from_stream(output_dir, "red_team")
+            if recovered is not None:
+                return recovered
+            raise
+
+    def propose_user_task(
+        self,
+        config: ExperimentConfig,
+        attempt: int,
+        output_dir: Path | None = None,
+    ) -> str:
+        from agentshim import CodingAgent
+
+        prompt = user_task_generation_prompt(config, attempt)
+        event_recorder = AgentTrajectoryRecorder("user_task", output_dir)
+        try:
+            return generate_red_team_submission(
+                CodingAgent,
+                self.config,
+                prompt=prompt,
+                kind="user_task",
+                attempt=attempt,
+                output_dir=output_dir,
+                event_recorder=event_recorder,
+                validator=user_task_validation_error_text,
+            )
+        except Exception:
+            recovered = recover_yaml_from_stream(output_dir, "user_task")
             if recovered is not None:
                 return recovered
             raise

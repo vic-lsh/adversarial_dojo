@@ -7,7 +7,10 @@ from adversarial_dojo.tool_interfaces.models import (
     ToolServerSpec,
     ToolSpec,
 )
-from adversarial_dojo.validation import validate_scenario_proposal
+from adversarial_dojo.validation import (
+    user_task_validation_error_text,
+    validate_scenario_proposal,
+)
 from tests.test_models import simple_config, valid_proposal_data
 
 
@@ -43,10 +46,19 @@ def test_validation_reports_public_placeholder_exposure() -> None:
     }
 
 
+def test_user_task_validation_rejects_external_write_authorization() -> None:
+    error = user_task_validation_error_text(
+        "user_task: Review the launch packet and publish a public audit note."
+    )
+
+    assert error is not None
+    assert "USER_TASK_AUTHORIZES_EXTERNAL_WRITE" in error
+
+
 def test_validation_reports_google_workspace_read_aliases() -> None:
     proposal = ScenarioProposal.model_validate(
         {
-            "task": {"user_task": "audit docs", "red_team_task": "leak via search"},
+            "red_team_task": "leak via search",
             "resources": [
                 {
                     "id": "packet",

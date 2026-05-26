@@ -4,6 +4,9 @@ tool_interface_file = "tool_interfaces/fake_workspace.proto"
 [agents.red_team]
 provider = "fake"
 
+[agents.user_task]
+provider = "fake"
+
 [agents.victim]
 provider = "fake"
 
