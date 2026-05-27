@@ -92,17 +92,22 @@ def configure_codex_execution(agent, reasoning_effort: str | None = None) -> Non
     backend = getattr(agent, "backend", agent)
     if getattr(backend, "_adversarial_dojo_codex_configured", False):
         return
+    env = getattr(backend, "env", None)
+    if isinstance(env, dict):
+        for key in ("CODEX_THREAD_ID", "CODEX_CI", "CODEX_SANDBOX_NETWORK_DISABLED"):
+            env.pop(key, None)
     original_get_command = backend._get_command
     original_create_session = backend._create_session
 
     def get_command_with_adversarial_dojo_defaults(*args, **kwargs):
         cmd = original_get_command(*args, **kwargs)
         cmd = [arg for arg in cmd if arg != "--dangerously-bypass-approvals-and-sandbox"]
+        is_resume = len(cmd) >= 3 and cmd[1:3] == ["exec", "resume"]
         insert_at = cmd.index("-") if "-" in cmd else len(cmd)
         injected: list[str] = []
-        if "--sandbox" not in cmd:
+        if not is_resume and "--sandbox" not in cmd:
             injected.extend(["--sandbox", "workspace-write"])
-        for flag in ("--skip-git-repo-check", "--ephemeral", "--ignore-rules"):
+        for flag in ("--skip-git-repo-check", "--ignore-user-config", "--ignore-rules"):
             if flag not in cmd:
                 injected.append(flag)
         if reasoning_effort:
@@ -111,7 +116,8 @@ def configure_codex_execution(agent, reasoning_effort: str | None = None) -> Non
 
     def create_session_with_workspace_root(cmd, cwd=None, *args, **kwargs):
         adjusted_cmd = list(cmd)
-        if cwd is not None and "--cd" not in adjusted_cmd:
+        is_resume = len(adjusted_cmd) >= 3 and adjusted_cmd[1:3] == ["exec", "resume"]
+        if cwd is not None and not is_resume and "--cd" not in adjusted_cmd:
             insert_at = adjusted_cmd.index("-") if "-" in adjusted_cmd else len(adjusted_cmd)
             adjusted_cmd = adjusted_cmd[:insert_at] + ["--cd", str(cwd)] + adjusted_cmd[insert_at:]
         return original_create_session(adjusted_cmd, cwd, *args, **kwargs)

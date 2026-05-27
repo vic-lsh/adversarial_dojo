@@ -78,6 +78,7 @@ def run_attack_search(
                 proposal=None,
             )
             _append_attempt(attempts_path, record)
+            _print_attempt_error(record, attempt_dir)
             continue
 
         scenario, proposal, error, should_analyze = _generate_scenario(
@@ -106,6 +107,7 @@ def run_attack_search(
             attempts.append(record)
             _write_attempt_artifacts(attempt_dir, record=record, scenario=None, proposal=proposal)
             _append_attempt(attempts_path, record)
+            _print_attempt_error(record, attempt_dir)
             continue
 
         record = _run_scenario(
@@ -125,6 +127,7 @@ def run_attack_search(
         attempts.append(record)
         _write_attempt_artifacts(attempt_dir, record=record, scenario=scenario, proposal=proposal)
         _append_attempt(attempts_path, record)
+        _print_attempt_error(record, attempt_dir)
         if record.success:
             winning_attempt = attempt_number
             break
@@ -189,7 +192,7 @@ def _generate_user_task(
             )
         )
     except RuntimeError as exc:
-        return None, f"user task agent crashed: {exc}"
+        return None, _format_agent_crash("user task", exc, "user_task", attempt_dir)
     _write_text(attempt_dir, "user_task.raw.txt", raw)
     validation_error = user_task_validation_error_text(raw)
     if validation_error is not None:
@@ -222,7 +225,7 @@ def _generate_scenario(
             )
         )
     except RuntimeError as exc:
-        return None, None, f"red team agent crashed: {exc}", False
+        return None, None, _format_agent_crash("red team", exc, "red_team", attempt_dir), False
     _write_text(attempt_dir, "red_team_scenario.raw.txt", raw)
     try:
         proposal = parse_scenario_proposal(raw)
@@ -272,7 +275,7 @@ def _repair_scenario(
         )
     except RuntimeError as exc:
         _write_text(attempt_dir, "red_team_repair_scenario.raw.txt", "")
-        return None, None, f"red team repair crashed: {exc}", True
+        return None, None, _format_agent_crash("red team repair", exc, "red_team", attempt_dir), True
     _write_text(attempt_dir, "red_team_repair_scenario.raw.txt", repaired)
     try:
         proposal = parse_scenario_proposal(repaired)
@@ -311,7 +314,7 @@ def _run_scenario(
         return AttemptRecord(
             attempt=attempt_number,
             proposal=proposal.model_dump(mode="json") if proposal else None,
-            error=f"victim crashed: {exc}",
+            error=_format_agent_crash("victim", exc, "victim", attempt_dir),
             victim_prompt=scenario.task.user_task,
         )
     return AttemptRecord(
@@ -352,7 +355,7 @@ def _attach_analysis(
         record.analysis = AttemptAnalysis(
             failure_stage="other",
             summary="analyzer crashed",
-            freeform_notes=str(exc),
+            freeform_notes=_format_agent_crash("analyzer", exc, "analyzer", attempt_dir),
         )
 
 
@@ -382,11 +385,54 @@ def _with_agent_crash_retries(call):
     raise RuntimeError(str(last_exc)) from last_exc
 
 
+def _format_agent_crash(
+    label: str,
+    exc: RuntimeError,
+    stream_role: str,
+    attempt_dir: Path | None,
+    *,
+    tail_chars: int = 2000,
+) -> str:
+    message = f"{label} agent crashed: {exc}"
+    stream_tail = _agent_stream_tail(attempt_dir, stream_role, tail_chars=tail_chars)
+    if stream_tail and stream_tail not in message:
+        message = f"{message}\n{stream_role}_stream tail:\n{stream_tail}"
+    return message
+
+
+def _agent_stream_tail(
+    attempt_dir: Path | None,
+    role: str,
+    *,
+    tail_chars: int = 2000,
+) -> str:
+    if attempt_dir is None:
+        return ""
+    path = attempt_dir / f"{role}_stream.txt"
+    if not path.exists():
+        return ""
+    text = path.read_text(encoding="utf-8", errors="replace").strip()
+    if len(text) <= tail_chars:
+        return text
+    return "... " + text[-tail_chars:]
+
+
 def _append_attempt(path: Path | None, record: AttemptRecord) -> None:
     if path is None:
         return
     with path.open("a", encoding="utf-8") as handle:
         handle.write(record.model_dump_json() + "\n")
+
+
+def _print_attempt_error(record: AttemptRecord, attempt_dir: Path | None) -> None:
+    if not record.error:
+        return
+    location = f" ({attempt_dir})" if attempt_dir is not None else ""
+    print(
+        f"attempt {record.attempt:03d} failed{location}: {record.error}",
+        file=sys.stderr,
+        flush=True,
+    )
 
 
 def _load_attempts(path: Path | None) -> list[AttemptRecord]:
